@@ -5,12 +5,17 @@ package prov
 
 import "time"
 
+// Entity is a thing whose origin is being recorded: a document, a chunk, a
+// triple, a graph. It names the activity that produced it and the entities it
+// was derived from, so a claim can be walked back to its sources.
 type Entity struct {
 	ID          string
 	GeneratedBy string // Activity.ID
 	DerivedFrom []string
 }
 
+// Activity is something that happened over an interval and produced entities:
+// an ingest, an extraction, a merge. Used lists what it read.
 type Activity struct {
 	ID    string
 	Kind  string
@@ -20,6 +25,8 @@ type Activity struct {
 	Used  []string // Entity.ID
 }
 
+// Agent is whoever bears responsibility for an activity — a person, a program,
+// or the organization either acts for.
 type Agent struct {
 	ID   string
 	Kind string // person, software, organization

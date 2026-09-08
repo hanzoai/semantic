@@ -4,7 +4,10 @@
 // without touching the rest.
 package semantic
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Doc is one parsed source: its text and where the text came from.
 type Doc struct {
@@ -34,15 +37,24 @@ type Triple struct {
 
 // The stages. Each takes the previous stage's value and returns the next.
 type (
+	// Ingester reads a reference — a path, a URL, a glob, a string — and
+	// returns the documents behind it. It is the only stage that touches
+	// the world outside the process.
 	Ingester interface {
 		Ingest(context.Context, string) ([]Doc, error)
 	}
+	// Parser reads a document's format and returns the same document with
+	// its text made plain and what it learned recorded in Meta.
 	Parser interface {
 		Parse(context.Context, Doc) (Doc, error)
 	}
+	// Splitter cuts a document into chunks small enough to extract from,
+	// on boundaries that keep the meaning whole.
 	Splitter interface {
 		Split(context.Context, Doc) ([]Chunk, error)
 	}
+	// Extractor reads a chunk and states what it asserts. The chunk travels
+	// with each triple, so every assertion can be traced to its sentence.
 	Extractor interface {
 		Extract(context.Context, Chunk) ([]Triple, error)
 	}
@@ -58,7 +70,12 @@ type Pipeline struct {
 }
 
 // Run carries one reference through every stage and returns what was asserted.
+// Every stage but the first may be nil; there is nothing to read without an
+// Ingester, so a pipeline without one is an error rather than an empty answer.
 func (p Pipeline) Run(ctx context.Context, ref string) ([]Triple, error) {
+	if p.Ingest == nil {
+		return nil, errors.New("semantic: pipeline has no ingester")
+	}
 	docs, err := p.Ingest.Ingest(ctx, ref)
 	if err != nil {
 		return nil, err
