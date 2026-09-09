@@ -61,6 +61,33 @@ outside the standard one, it is a driver nobody has written, it is a notebook
 rather than a library, the service is not one we run, or Go's types already
 say it.
 
+## Benchmark
+
+`bench/locomo` runs LoCoMo, the long-conversation recall benchmark: ten
+conversations held over months, 5,882 turns, 1,986 questions, and a scorer that
+rewards declining to answer the ones built to look answerable and are not. Two
+memories are built over the same turns from these packages and read by the same
+reader — turns in a `store.Mem` retrieved by cosine, and a `kg` graph of who did
+what retrieved by looking up the person a question names — plus an oracle arm
+holding the annotated evidence, which bounds what the reader can do.
+
+    GOWORK=off go run ./bench/locomo
+
+The graph scores 0.223 against the flat index's 0.156 overall, level on the
+1,540 answerable questions and 0.502 against 0.200 on the 446 adversarial ones,
+and it leads at every matched rate of declining. It gets there by being
+selectively blind: it reaches 58-79% of the evidence for questions that have an
+answer and 27% for questions that do not, because a turn about somebody else is
+not a candidate however close its wording. `bench/locomo/README.md` has the
+tables, the sweeps, where the graph loses, and how to reproduce.
+
+The metric is ported from `task_eval/evaluation.py`, including the NLTK Porter
+stemmer it calls, and held against it three ways in tests plus once end to end:
+`score.py` runs the official Python over the same predictions and reproduces
+every figure to three decimals. LoCoMo is CC BY-NC and this module is MIT, so
+neither the dataset nor their scorer is kept here; both are fetched on first
+use, the dataset through `ingest.Web`.
+
 ## What is not here
 
 Grouped by why, because the reasons differ and only one of them is work left

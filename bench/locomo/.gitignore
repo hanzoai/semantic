@@ -1,0 +1,14 @@
+# LoCoMo is CC BY-NC 4.0 and this repository is MIT, so nothing of theirs is
+# kept here. The dataset and the official scorer are fetched on first use.
+data/
+ref/evaluation.py
+
+# Golden files holding dataset text, written by `make golden`. The stem table
+# is a word list and stays; these two quote questions, answers and turns.
+testdata/normalise.tsv
+testdata/grade.tsv
+
+# What a run produces, and what the Python scorer needs to run.
+out/
+.venv/
+__pycache__/
