@@ -44,6 +44,23 @@ temporary file and asserts the N-Triples that come out.
 | `export` | json, ndjson, jsonld, csv, tsv, nt, ttl, rdfxml, graphml, gexf, dot, mermaid, cypher | full for those; five of them read back |
 | `decision`, `prov` | the record types the layers above write | declarations only |
 
+## Examples
+
+`examples/` holds eighteen runnable programs, one per capability, each with a
+`main.go` that says at the top what it demonstrates. None reaches the internet
+or asks a model: where a stage needs something this module does not compute,
+the example supplies a deterministic stand-in behind the same interface and
+says so, and the HTTP paths run against servers started on loopback so the
+requests the drivers send are real and visible.
+
+    GOWORK=off go run ./examples/pipeline
+
+`examples/README.md` maps them onto the Python cookbook's 40 notebooks and
+lists what did not port, grouped by why: it needs a model, it needs a library
+outside the standard one, it is a driver nobody has written, it is a notebook
+rather than a library, the service is not one we run, or Go's types already
+say it.
+
 ## What is not here
 
 Grouped by why, because the reasons differ and only one of them is work left
