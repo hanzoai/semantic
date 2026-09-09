@@ -60,22 +60,65 @@ rewards silence. The two halves have to be read apart, and only the split below
 means anything.
 
 The two memories are level on the 1,540 answerable questions — 0.142 against
-0.144, bootstrap CI over the ten conversations [-0.010, +0.006] — and separate
-on the 446 adversarial ones, 0.502 against 0.200, CI [+0.248, +0.347]. The
+0.144, 95% CI [-0.011, +0.006] — and separate on the 446 adversarial ones,
+0.502 against 0.200, CI [+0.247, +0.346]. Both intervals are the percentile
+bootstrap over the ten conversations, resampling conversations rather than
+questions because questions within one conversation share a memory and are not
+independent. The
 graph declined on half the adversarial questions and a quarter of the
 answerable ones. The vector index declined on a fifth of each. **It declines at
-the same rate on both because it cannot tell them apart**: its abstention
-carries no signal about whether a question is answerable at all (ROC AUC 0.520,
-which is chance), where the subject-scoped index's carries some (0.684).
+the same rate on both because it cannot tell them apart.** Abstention here is a
+threshold on one number, the confidence in the evidence returned, and how well
+that number separates an answerable question from an adversarial one is a
+property of the memory that owes nothing to where the threshold sits. It
+separates them at AUC 0.514 for the flat index, which is chance, and 0.698 for
+the subject-scoped one. The confidence goes out with the predictions, so this
+is checkable rather than asserted.
 
-Two limits on how far that separation generalizes. About half of it is the
-subject filter alone rather than anything read from the turns — adding only the
-subject partition to the unchanged baseline turn index gets 0.354 adversarial,
-and the claim-span index with the filter removed scores 0.170, below the flat
-baseline. And "level on answerable" is weaker than it sounds: the extractive
+Two limits on how far that separation generalizes. Half of it is the subject
+filter alone rather than anything read from the turns; the 2x2 below takes that
+apart. And "level on answerable" is weaker than it sounds: the extractive
 reader tops out at 0.306 there even with perfect retrieval, so that column is
 nearly insensitive to retrieval quality and could move once a model reader sits
 behind both arms.
+
+## Which of the two changes carries it
+
+The graph arm changes two things at once against the baseline: it indexes claim
+spans rather than whole turns, and it answers only out of the pieces of the
+person a question names rather than out of everything. Two cells cannot tell
+those apart, so here are the other two.
+
+    go run ./bench/locomo -factor
+
+```
+                               graph                scoped                  span                vector
+category           n      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet
+single hop       841   0.121  0.507    24%   0.129  0.533    21%   0.129  0.541    16%   0.118  0.546    20%
+multi hop        282   0.020  0.228    18%   0.021  0.219    18%   0.023  0.209    15%   0.023  0.194    17%
+temporal         321   0.338  0.532    23%   0.328  0.559    23%   0.362  0.553    16%   0.357  0.581    16%
+open domain       96   0.018  0.238    56%   0.016  0.239    47%   0.016  0.225    43%   0.016  0.258    45%
+adversarial      446   0.502  0.135    50%   0.352  0.207    35%   0.170  0.571    17%   0.200  0.511    20%
+answerable      1540   0.142  0.444    25%   0.144  0.463    23%   0.151  0.463    17%   0.144  0.471    20%
+```
+
+`scoped` indexes whole turns and files each under every person it was read as
+being about; `span` is the graph's own index with the subject filter taken off.
+Adversarial F1 across the four:
+
+|             | all reachable | only the subject's |
+|-------------|---------------|--------------------|
+| whole turn  | 0.200         | 0.352              |
+| claim span  | 0.170         | 0.502              |
+
+Scoping is worth +0.152 on its own. The claim span on its own is worth -0.030 —
+it is *worse* than the baseline, because a narrower unit with everything still
+reachable only makes the trap turn easier to find, and `span` does retrieve more
+adversarial evidence than the baseline does, recall 0.571 against 0.511. The two
+together are worth +0.302, so +0.180 of the result is in neither factor but in
+their product: narrowing the unit is what sharpens the partition, since a turn
+belongs to every person spoken of in it and a span belongs to one. On the 1,540
+answerable questions no cell moves — 0.142, 0.144, 0.151, 0.144.
 
 ## Why the adversarial questions separate them
 
@@ -216,6 +259,7 @@ terms.go    one vocabulary, weighed once, shared by everything
 read.go     the reader, shared by every arm
 metric.go   the official metric, ported
 porter.go   the stemmer the official metric runs
+factor.go   the other two cells: turns scoped, spans unscoped
 bench.go    the experiment and the table
 ```
 
@@ -311,6 +355,7 @@ here for that reason; the bound is ours, not the scorer's.
 go run ./bench/locomo                        # the table above
 go run ./bench/locomo -show 5                # answers, side by side, per category
 go run ./bench/locomo -sweep floor           # or k, span, band, parts
+go run ./bench/locomo -factor                # index unit against subject scope
 go run ./bench/locomo -k 2000 -floor 0       # what each index can reach
 go run ./bench/locomo -out bench/locomo/out/answers.json
 go test ./bench/locomo/

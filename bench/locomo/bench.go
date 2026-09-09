@@ -40,6 +40,7 @@ type Record struct {
 	Evidence []string
 	Reply    string
 	Context  []string
+	Sure     float64
 	Score    float64
 	Recall   float64
 }
@@ -146,8 +147,11 @@ type Case struct {
 	Arms   []Arm
 }
 
-// Build reads every conversation into every memory.
-func Build(ctx context.Context, samples []Sample, log io.Writer) (Bench, error) {
+// Build reads every conversation into every memory. With factor set it builds
+// the 2x2 of what is indexed against what is reachable instead of the four
+// arms, which is what says whether the result belongs to the claim spans or to
+// the subject scope.
+func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (Bench, error) {
 	var out Bench
 	for _, s := range samples {
 		words := Vocabulary(s.Turns)
@@ -161,12 +165,25 @@ func Build(ctx context.Context, samples []Sample, log io.Writer) (Bench, error) 
 		}
 		fmt.Fprintf(log, "%-10s %4d turns  %5d terms  %6d claims  %5d nodes  %6d edges  %4d derived\n",
 			s.ID, len(s.Turns), words.Size(), graph.Claims(), graph.Nodes(), graph.Edges(), graph.Facts())
-		out = append(out, Case{Sample: s, Words: words, Arms: []Arm{
+		arms := []Arm{
 			{Name: "vector", Memory: vector},
 			{Name: "graph", Memory: graph},
 			{Name: "graph+edge", Memory: graph, Edge: true},
 			{Name: "oracle", Memory: NewOracle(s, words)},
-		}})
+		}
+		if factor {
+			scoped, err := NewScoped(ctx, graph)
+			if err != nil {
+				return nil, err
+			}
+			arms = []Arm{
+				{Name: "vector", Memory: vector},
+				{Name: "scoped", Memory: scoped},
+				{Name: "span", Memory: Flat{graph}},
+				{Name: "graph", Memory: graph},
+			}
+		}
+		out = append(out, Case{Sample: s, Words: words, Arms: arms})
 	}
 	return out, nil
 }
@@ -205,7 +222,7 @@ func (b Bench) Run(ctx context.Context, o Options) (map[string]*Tally, map[strin
 				r := Record{
 					Sample: c.Sample.ID, Question: ask.Text, Answer: ask.Answer,
 					Kind: ask.Kind, Evidence: ask.Evidence,
-					Reply: reply, Context: ids(got.cites),
+					Reply: reply, Context: ids(got.cites), Sure: got.sure,
 					Score:  grade(ask.Kind, reply, ask.Answer),
 					Recall: found(ask.Evidence, ids(got.cites)),
 				}

@@ -56,6 +56,7 @@ type Knowledge struct {
 // once and is asked about it thousands of times.
 type Piece struct {
 	Turn   int
+	Who    string // whose it is, folded, which is what the query filters on
 	Said   string // the sentences the claims were read from
 	Terms  map[string]bool
 	Claims []Held
@@ -180,7 +181,7 @@ func (k *Knowledge) file(ctx context.Context, claims []Claim) error {
 		group[at] = append(group[at], c)
 	}
 	for _, at := range order {
-		piece := Piece{Turn: at.turn, Terms: map[string]bool{}}
+		piece := Piece{Turn: at.turn, Who: at.who, Terms: map[string]bool{}}
 		var said []string
 		for _, c := range group[at] {
 			held := Held{Object: c.Object, Terms: Terms(c.Predicate + " " + c.Object)}
@@ -227,9 +228,17 @@ func (k *Knowledge) Facts() int  { return k.facts }
 // which is the honest thing for a memory asked about a stranger. It happens
 // for about one question in a hundred here.
 func (k *Knowledge) Recall(ctx context.Context, question string, n int) ([]Cite, error) {
-	subject := kg.Fold(k.subject(question))
+	return k.recall(ctx, question, n, true)
+}
+
+// recall ranks the pieces, either the named person's or everybody's. Scoping
+// is the one factor separating this arm from the baseline that is not about
+// what is indexed, so it is a parameter here and an arm in factor.go rather
+// than something only the graph does.
+func (k *Knowledge) recall(ctx context.Context, question string, n int, scope bool) ([]Cite, error) {
+	subject := k.fold(question)
 	query := store.Query{Vec: k.words.Weigh(question), K: n}
-	if subject != "" {
+	if scope && subject != "" {
 		query.Filter = store.Filter{}.Eq(store.Space, subject)
 	}
 	near, err := k.mem.Search(ctx, query)
@@ -254,6 +263,9 @@ func (k *Knowledge) Recall(ctx context.Context, question string, n int) ([]Cite,
 	}
 	return out, nil
 }
+
+// fold is the subject of a question, in the form the store files people under.
+func (k *Knowledge) fold(question string) string { return kg.Fold(k.subject(question)) }
 
 // subject is the person a question is about: the longest name the graph knows
 // that the question contains. LoCoMo questions name their subject 98.9% of the

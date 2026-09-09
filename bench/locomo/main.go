@@ -6,6 +6,7 @@
 //	go run ./bench/locomo                    the table
 //	go run ./bench/locomo -show 5            answers, side by side
 //	go run ./bench/locomo -sweep floor       how the answer moves with a setting
+//	go run ./bench/locomo -factor            index unit against subject scope
 //	go run ./bench/locomo -out bench/locomo/out/answers.json
 //
 // Run it from the repository root; the default paths are relative to there.
@@ -26,12 +27,13 @@ import (
 // Task is one invocation: what to read, what to vary, and what to write.
 type Task struct {
 	Options
-	Data  string
-	Out   string
-	Sweep string
-	Show  int
-	Only  int
-	Quiet bool
+	Data   string
+	Out    string
+	Sweep  string
+	Show   int
+	Only   int
+	Quiet  bool
+	Factor bool
 }
 
 func main() {
@@ -47,6 +49,7 @@ func main() {
 	flag.IntVar(&t.Show, "show", 0, "print this many answered questions per category")
 	flag.IntVar(&t.Only, "only", 0, "use only the first N conversations, for a quick look")
 	flag.BoolVar(&t.Quiet, "quiet", false, "leave out the per-conversation build lines")
+	flag.BoolVar(&t.Factor, "factor", false, "report the 2x2 of what is indexed against what is reachable")
 	flag.Parse()
 
 	if err := t.Run(context.Background()); err != nil {
@@ -77,7 +80,7 @@ func (t Task) Run(ctx context.Context) error {
 	if t.Quiet || t.Sweep != "" {
 		log = io.Discard
 	}
-	bench, err := Build(ctx, samples, log)
+	bench, err := Build(ctx, samples, log, t.Factor)
 	if err != nil {
 		return err
 	}
@@ -163,7 +166,10 @@ func (t Task) spread(ctx context.Context, bench Bench) error {
 
 // write saves the predictions in the shape task_eval/evaluate_qa.py writes and
 // task_eval/evaluation.py reads, so the official Python can be run over the
-// same answers and the two scorers compared rather than trusted.
+// same answers and the two scorers compared rather than trusted. The
+// confidence each arm had in its evidence goes out alongside, since whether
+// that number separates an answerable question from an adversarial one is a
+// property of the memory and cannot be recovered from the reply.
 func write(path string, samples []Sample, records map[string][]Record) error {
 	type conversation struct {
 		ID string           `json:"sample_id"`
@@ -191,6 +197,7 @@ func write(path string, samples []Sample, records map[string][]Record) error {
 			seen[r.Sample]++
 			qa[arm+"_prediction"] = r.Reply
 			qa[arm+"_prediction_context"] = r.Context
+			qa[arm+"_prediction_confidence"] = r.Sure
 		}
 	}
 	sort.Strings(arms)
