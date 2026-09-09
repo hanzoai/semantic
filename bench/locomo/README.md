@@ -10,9 +10,18 @@ the same reader, marked by the dataset's own scorer.
 
 - **vector** — every turn as a weighted bag of stemmed terms in `store.Mem`,
   retrieved by cosine. This is how the benchmark is usually attempted.
-- **graph** — every turn read for who did what, folded into a `kg` graph, and
-  retrieved by looking up the person the question names and ranking what they
-  said. Retrieval is a lookup on a node, not a nearest neighbour.
+- **graph** — every turn read for who did what, then indexed under the person it
+  was read as being about. Retrieval is still cosine over `store.Mem`; what
+  changes is that the question's named subject filters the candidates first.
+
+That second description is deliberate and was corrected after review. An earlier
+version of this file said retrieval here is "a lookup on a node, not a nearest
+neighbour." That was false, and the ablation is one line: empty the `kg` graph
+entirely and every number below is byte-identical. The graph is where the read
+turns are *kept*; it is not what answers a question. The measured effect comes
+from scoping retrieval by subject, not from graph structure and not from
+inference — `reason` derives 44 facts from 23,942, which is decoration at this
+scale.
 
 Two more columns keep the first two readable. **graph+edge** is the same graph
 read differently: the answer comes off the matched edge rather than out of the
@@ -43,11 +52,30 @@ overall         1986   0.223  0.375    31%   0.191  0.375    29%   0.252  0.993 
 turns the memory returned, which owes nothing to the reader. `quiet` is how
 often it declined to answer.
 
+**Read the `overall` row as arithmetic, not as a result.** A system that replies
+"No information available" to all 1,986 questions scores 0.228 on this metric,
+which beats every arm in the table. A quarter of the questions are adversarial
+and the scorer rewards declining them, so any aggregate over the whole set
+rewards silence. The two halves have to be read apart, and only the split below
+means anything.
+
 The two memories are level on the 1,540 answerable questions — 0.142 against
-0.144 — and separate on the 446 adversarial ones, 0.502 against 0.200. The
+0.144, bootstrap CI over the ten conversations [-0.010, +0.006] — and separate
+on the 446 adversarial ones, 0.502 against 0.200, CI [+0.248, +0.347]. The
 graph declined on half the adversarial questions and a quarter of the
 answerable ones. The vector index declined on a fifth of each. **It declines at
-the same rate on both because it cannot tell them apart.**
+the same rate on both because it cannot tell them apart**: its abstention
+carries no signal about whether a question is answerable at all (ROC AUC 0.520,
+which is chance), where the subject-scoped index's carries some (0.684).
+
+Two limits on how far that separation generalizes. About half of it is the
+subject filter alone rather than anything read from the turns — adding only the
+subject partition to the unchanged baseline turn index gets 0.354 adversarial,
+and the claim-span index with the filter removed scores 0.170, below the flat
+baseline. And "level on answerable" is weaker than it sounds: the extractive
+reader tops out at 0.306 there even with perfect retrieval, so that column is
+nearly insensitive to retrieval quality and could move once a model reader sits
+behind both arms.
 
 ## Why the adversarial questions separate them
 
