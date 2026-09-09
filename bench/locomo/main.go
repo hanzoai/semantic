@@ -8,6 +8,7 @@
 //	go run ./bench/locomo -sweep floor       how the answer moves with a setting
 //	go run ./bench/locomo -factor            index unit against subject scope
 //	go run ./bench/locomo -out bench/locomo/out/answers.json
+//	go run ./bench/locomo -stats bench/locomo/out/answers.json
 //
 // Run it from the repository root; the default paths are relative to there.
 package main
@@ -29,6 +30,7 @@ type Task struct {
 	Options
 	Data   string
 	Out    string
+	Stats  string
 	Sweep  string
 	Show   int
 	Only   int
@@ -45,6 +47,7 @@ func main() {
 	flag.Float64Var(&t.Band, "band", 0.9, "how close to the best a further piece of evidence must be")
 	flag.IntVar(&t.Parts, "parts", 2, "pieces of evidence one answer may draw on")
 	flag.StringVar(&t.Out, "out", "", "write predictions here, in the shape the official scorer reads")
+	flag.StringVar(&t.Stats, "stats", "", "read a predictions file back: constant abstention, the AUCs, the intervals")
 	flag.StringVar(&t.Sweep, "sweep", "", "k, floor, span, band or parts: run the whole benchmark once per value")
 	flag.IntVar(&t.Show, "show", 0, "print this many answered questions per category")
 	flag.IntVar(&t.Only, "only", 0, "use only the first N conversations, for a quick look")
@@ -61,6 +64,9 @@ func main() {
 // Run reads the dataset, builds both memories over every conversation, and
 // either reports one setting or sweeps one.
 func (t Task) Run(ctx context.Context) error {
+	if t.Stats != "" {
+		return Stats(os.Stdout, t.Stats)
+	}
 	samples, err := Load(t.Data)
 	if err != nil {
 		return err
@@ -69,12 +75,18 @@ func (t Task) Run(ctx context.Context) error {
 		samples = samples[:t.Only]
 	}
 
-	turns, asks := 0, 0
+	sessions, turns, asks := 0, 0, 0
 	for _, s := range samples {
+		held := map[int]bool{}
+		for _, t := range s.Turns {
+			held[t.Session] = true
+		}
+		sessions += len(held)
 		turns += len(s.Turns)
 		asks += len(s.Asks)
 	}
-	fmt.Printf("%d conversations, %d turns, %d questions\n\n", len(samples), turns, asks)
+	fmt.Printf("%d conversations, %d sessions, %d turns, %d questions\n\n",
+		len(samples), sessions, turns, asks)
 
 	var log io.Writer = os.Stdout
 	if t.Quiet || t.Sweep != "" {
@@ -84,6 +96,10 @@ func (t Task) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	speaker, known, asked := bench.Subjects()
+	fmt.Printf("questions naming a speaker %d/%d (%.1f%%), resolving to any known name %d/%d (%.2f%%)\n",
+		speaker, asked, 100*float64(speaker)/float64(asked),
+		known, asked, 100*float64(known)/float64(asked))
 	if t.Sweep != "" {
 		return t.spread(ctx, bench)
 	}

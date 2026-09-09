@@ -54,26 +54,28 @@ often it declined to answer.
 
 **Read the `overall` row as arithmetic, not as a result.** A system that replies
 "No information available" to all 1,986 questions scores 0.228 on this metric,
-which beats every arm in the table. A quarter of the questions are adversarial
-and the scorer rewards declining them, so any aggregate over the whole set
-rewards silence. The two halves have to be read apart, and only the split below
-means anything.
+above every arm in the table that has to find its own evidence — the best of
+those is 0.223 — and within 0.024 of `oracle`, which is handed the annotated
+evidence. A quarter of the questions are adversarial and the scorer rewards
+declining them, so any aggregate over the whole set rewards silence. The two
+halves have to be read apart, and only the split below means anything.
 
 The two memories are level on the 1,540 answerable questions — 0.142 against
-0.144, 95% CI [-0.011, +0.006] — and separate on the 446 adversarial ones,
-0.502 against 0.200, CI [+0.247, +0.346]. Both intervals are the percentile
+0.144, 95% CI [-0.010, +0.006] — and separate on the 446 adversarial ones,
+0.502 against 0.200, CI [+0.247, +0.347]. Both intervals are the percentile
 bootstrap over the ten conversations, resampling conversations rather than
 questions because questions within one conversation share a memory and are not
-independent. The
+independent; there are only 92,378 ways to draw ten from ten with replacement,
+so `-stats` enumerates them all and the interval is exact. The
 graph declined on half the adversarial questions and a quarter of the
 answerable ones. The vector index declined on a fifth of each. **It declines at
 the same rate on both because it cannot tell them apart.** Abstention here is a
 threshold on one number, the confidence in the evidence returned, and how well
 that number separates an answerable question from an adversarial one is a
 property of the memory that owes nothing to where the threshold sits. It
-separates them at AUC 0.514 for the flat index, which is chance, and 0.698 for
-the subject-scoped one. The confidence goes out with the predictions, so this
-is checkable rather than asserted.
+separates them at AUC 0.514 for `vector`, which is chance, and 0.698 for
+`graph`. The confidence goes out with the predictions and `-stats` reads it
+back, so this is checkable rather than asserted.
 
 Two limits on how far that separation generalizes. Half of it is the subject
 filter alone rather than anything read from the turns; the 2x2 below takes that
@@ -111,28 +113,32 @@ Adversarial F1 across the four:
 | whole turn  | 0.200         | 0.352              |
 | claim span  | 0.170         | 0.502              |
 
-Scoping is worth +0.152 on its own. The claim span on its own is worth -0.030 —
-it is *worse* than the baseline, because a narrower unit with everything still
-reachable only makes the trap turn easier to find, and `span` does retrieve more
-adversarial evidence than the baseline does, recall 0.571 against 0.511. The two
-together are worth +0.302, so +0.180 of the result is in neither factor but in
-their product: narrowing the unit is what sharpens the partition, since a turn
-belongs to every person spoken of in it and a span belongs to one. On the 1,540
-answerable questions no cell moves — 0.142, 0.144, 0.151, 0.144.
+Scoping the unchanged turn index is worth +0.152. The claim span on its own is
+worth -0.029 — it is *worse* than the baseline, because a narrower unit with
+everything still reachable only makes the trap turn easier to find, and `span`
+does retrieve more adversarial evidence than the baseline does, recall 0.571
+against 0.511. The two together are worth +0.303, so +0.179 of the result is in
+neither factor but in their product: narrowing the unit is what sharpens the
+partition, since a turn belongs to every person spoken of in it and a span
+belongs to one. (Differences are computed from the unrounded scores, so they do
+not always match the differences of the rounded cells.) On the 1,540 answerable
+questions no cell moves — 0.142, 0.144, 0.151, 0.144.
 
 ## Why the adversarial questions separate them
 
 An adversarial question in LoCoMo is not nonsense. It is a question about the
 wrong person. From `conv-43`:
 
-> **D20:2** John: *Congrats on your success! I'm also trying out yoga to get a
-> little extra strength and flexibility.*
+> **D20:2** John: *Hi Tim! Congrats on your success! … I'm also trying out yoga
+> to get a little extra strength and flexibility.*
 >
 > **Q** What is Tim trying out to improve his strength and flexibility after
 > recovery from ankle injury?
 
-John does yoga. Tim asked him about it. The reference answer is that the
-conversation does not say. What the run produced:
+John does yoga. Tim asked him about it. The question carries no reference
+answer — its `adversarial_answer` field holds the plausible wrong one, "yoga",
+and the scorer reads neither — so the reply that scores is one that declines.
+What the run produced:
 
 ```
 vector     : 'yoga get little extra'          ctx=[D20:2 D20:4 D7:16 D19:1 D19:6]
@@ -207,10 +213,13 @@ silent as the other:
 
 (graph at floors 0.2, 0.3, 0.4, 0.5 against vector at 0.2, 0.4, 0.5, 0.6.)
 
-At every rate of declining, the graph is ahead of the flat index on both halves
-of the benchmark. Silence alone does not buy this: either arm can be made to
-fall silent as often as you like, and only one of them falls silent on the
-right questions.
+At each of those four rates the graph is ahead of the flat index on both halves
+of the benchmark. The lead belongs to the middle of the range: matched at 8%
+silence — `vector` declines no less often than that even with the floor at zero
+— the adversarial scores are 0.094 against 0.092, and below that rate `vector`
+cannot be matched at all. Silence alone does not buy the result: either arm can
+be made to fall silent as often as you like, and over the range where declining
+is worth anything only one of them falls silent on the right questions.
 
 ## Where the graph does not win
 
@@ -234,10 +243,13 @@ answers*, at least when the extractor is rules rather than a model.
 **Inference.** `reason` runs over the extracted triples with one rule, that what
 a thing is called is also what its owner has. Across all ten conversations it
 derived 44 facts from 23,942. Conversational memory is dominated by aggregation
-over node identity — the same person mentioned in two sessions is one node,
-which needs no inference at all — and there is very little left for a reasoner
-to add. That is a finding, not a defect: it says where the value in this kind of
-graph actually sits.
+over identity — the same person mentioned in two sessions is one key, the folded
+name each piece is filed under, which needs no inference at all — and there is
+very little left for a reasoner to add. That is a finding, not a defect: it says
+where the value in this kind of graph actually sits. Deleting the derived facts
+moves nothing by more than two thousandths: single-hop F1 rises 0.121 → 0.122,
+single-hop recall falls 0.507 → 0.505, and no F1 on either half moves at three
+decimals.
 
 **Absolute numbers.** Everything here is low. The reader is deterministic and
 extractive: it picks the sentence covering most of the question, drops the words
@@ -261,6 +273,7 @@ metric.go   the official metric, ported
 porter.go   the stemmer the official metric runs
 factor.go   the other two cells: turns scoped, spans unscoped
 bench.go    the experiment and the table
+stats.go    what the table cannot show, read back off the predictions
 ```
 
 **Reading dialogue.** The library's `extract.Rules` knows how to find a company
@@ -278,9 +291,11 @@ and both are grammar rather than tuning:
 - A negation is kept. *"I don't eat dairy"* is stored with the negation on the
   predicate, so it is findable and is not mistaken for its opposite.
 
-98.9% of LoCoMo questions name one of the two speakers, which is what makes a
-lookup on a person the right query for them. The 1.1% that name nobody fall back
-to searching every piece.
+98.9% of LoCoMo questions (1,964 of 1,986) name one of the two speakers, which
+is what makes a lookup on a person the right query for them. The resolver takes
+the longest name it knows that the question contains, speakers and third parties
+alike, and so resolves 1,975 of them (99.45%); the remaining 11 name nobody it
+knows and fall back to searching every piece. The run prints both counts.
 
 **What is indexed.** The baseline indexes turns. The graph indexes *pieces* — what
 one person said in one turn — so a turn holds as many pieces as it has people
@@ -338,8 +353,14 @@ answerable      1540   0.142  0.444          0.107  0.444          0.202  0.991 
 overall         1986   0.223  0.375          0.191  0.375          0.252  0.993          0.156  0.480
 ```
 
-Every figure matches the Go to three decimals, across 1,986 questions and four
-arms.
+`make check` scores both predictions files this way, and every figure matches
+the Go to three decimals, across 1,986 questions and all six arms.
+
+One adaptation lives in `score.py` rather than in the vendored file: the
+official recall reads `context[0]` to tell a session id from a dialogue id, and
+an arm that returned nothing has no `context[0]`, so a placeholder matching no
+evidence is substituted. Without it the official code awards recall 1.0 to an
+arm that returned nothing.
 
 Two details of the official scorer are worth stating, because they shape what
 the numbers mean. An adversarial answer is scored by looking for the phrases
@@ -358,8 +379,15 @@ go run ./bench/locomo -sweep floor           # or k, span, band, parts
 go run ./bench/locomo -factor                # index unit against subject scope
 go run ./bench/locomo -k 2000 -floor 0       # what each index can reach
 go run ./bench/locomo -out bench/locomo/out/answers.json
+go run ./bench/locomo -stats bench/locomo/out/answers.json
 go test ./bench/locomo/
 ```
+
+`-stats` reads a predictions file back and reports the three things the table
+cannot show: what constant abstention scores, how far each arm's confidence
+tells an answerable question from an adversarial one, and the paired difference
+between every pair of arms with its bootstrap interval. Every flag above also
+takes `-factor`, which swaps `graph+edge` and `oracle` for `scoped` and `span`.
 
 Run from the repository root, and with `GOWORK=off` if a parent `go.work` is in
 the way. Reading ten conversations into both memories and answering 1,986
@@ -377,7 +405,8 @@ For the Python cross-check:
 ```sh
 cd bench/locomo
 make golden    # writes the two golden files that quote the dataset
-make check     # scores out/answers.json with the official evaluation.py
+make check     # scores both predictions files with the official evaluation.py
+make stats     # constant abstention, the AUCs, the intervals
 ```
 
 Both fetch what they need. LoCoMo is CC BY-NC 4.0 and this repository is MIT, so

@@ -140,10 +140,13 @@ var Kinds = []struct {
 type Bench []Case
 
 // Case is one conversation prepared for questioning: its vocabulary, and the
-// memories built over it.
+// memories built over it. The graph is kept beside the arms because what it
+// read out of the turns — which people this conversation knows about — is what
+// decides whether a question can be looked up by subject at all.
 type Case struct {
 	Sample Sample
 	Words  *Words
+	Know   *Knowledge
 	Arms   []Arm
 }
 
@@ -153,6 +156,7 @@ type Case struct {
 // the subject scope.
 func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (Bench, error) {
 	var out Bench
+	var turns, claims, nodes, edges, facts int
 	for _, s := range samples {
 		words := Vocabulary(s.Turns)
 		vector, err := NewVector(ctx, s.Turns, words)
@@ -165,6 +169,8 @@ func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (B
 		}
 		fmt.Fprintf(log, "%-10s %4d turns  %5d terms  %6d claims  %5d nodes  %6d edges  %4d derived\n",
 			s.ID, len(s.Turns), words.Size(), graph.Claims(), graph.Nodes(), graph.Edges(), graph.Facts())
+		turns, claims = turns+len(s.Turns), claims+graph.Claims()
+		nodes, edges, facts = nodes+graph.Nodes(), edges+graph.Edges(), facts+graph.Facts()
 		arms := []Arm{
 			{Name: "vector", Memory: vector},
 			{Name: "graph", Memory: graph},
@@ -183,9 +189,33 @@ func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (B
 				{Name: "graph", Memory: graph},
 			}
 		}
-		out = append(out, Case{Sample: s, Words: words, Arms: arms})
+		out = append(out, Case{Sample: s, Words: words, Know: graph, Arms: arms})
 	}
+	fmt.Fprintf(log, "%-10s %4d turns  %5s terms  %6d claims  %5d nodes  %6d edges  %4d derived\n",
+		"total", turns, "", claims, nodes, edges, facts)
 	return out, nil
+}
+
+// Subjects counts the questions a memory can look a person up for: those
+// naming one of the two speakers, and those naming anyone the conversation
+// mentioned by name, which is the wider set the subject resolver matches. The
+// rest reach every piece, which is the honest behaviour for a memory asked
+// about a stranger.
+func (b Bench) Subjects() (speaker, known, asked int) {
+	for _, c := range b {
+		for _, ask := range c.Sample.Asks {
+			asked++
+			low := strings.ToLower(ask.Text)
+			if mentions(low, strings.ToLower(c.Sample.Who[0])) ||
+				mentions(low, strings.ToLower(c.Sample.Who[1])) {
+				speaker++
+			}
+			if c.Know.subject(ask.Text) != "" {
+				known++
+			}
+		}
+	}
+	return speaker, known, asked
 }
 
 // answer is what one memory said about one question, kept so that two readers

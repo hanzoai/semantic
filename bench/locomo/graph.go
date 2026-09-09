@@ -225,8 +225,8 @@ func (k *Knowledge) Facts() int  { return k.facts }
 // person was the subject of a sentence.
 //
 // A question naming nobody the graph knows falls back to ranking everything,
-// which is the honest thing for a memory asked about a stranger. It happens
-// for about one question in a hundred here.
+// which is the honest thing for a memory asked about a stranger. It happens for
+// 11 of the 1,986 questions here; the run reports the count.
 func (k *Knowledge) Recall(ctx context.Context, question string, n int) ([]Cite, error) {
 	return k.recall(ctx, question, n, true)
 }
@@ -268,8 +268,9 @@ func (k *Knowledge) recall(ctx context.Context, question string, n int, scope bo
 func (k *Knowledge) fold(question string) string { return kg.Fold(k.subject(question)) }
 
 // subject is the person a question is about: the longest name the graph knows
-// that the question contains. LoCoMo questions name their subject 98.9% of the
-// time, which is what makes a lookup on a person the right query for them.
+// that the question contains, speakers and third parties alike. 98.9% of LoCoMo
+// questions name one of the two speakers and 99.45% name someone the graph
+// knows, which is what makes a lookup on a person the right query for them.
 func (k *Knowledge) subject(question string) string {
 	low := strings.ToLower(question)
 	for _, name := range k.people {
