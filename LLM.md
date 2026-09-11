@@ -81,6 +81,32 @@ answer and 27% for questions that do not, because a turn about somebody else is
 not a candidate however close its wording. `bench/locomo/README.md` has the
 tables, the sweeps, where the graph loses, and how to reproduce.
 
+Neither of those two memories reads the graph: emptying it leaves every figure
+byte-identical, and the effect is the subject scope. A third arm does read it.
+
+    GOWORK=off go run ./bench/locomo -arms walk
+    GOWORK=off go run ./bench/locomo -arms walk -blind
+
+`path` stands on the nodes a question names, takes the assertions out of them,
+gathers those into relations — one relation's values are one answer, so where
+Melanie camped is the beach and the mountains and the forest — and cites the
+turns behind the relation that fits. On the multi-hop questions it scores 0.032
+against the graph's 0.020 and the flat index's 0.023 out of near-identical
+evidence recall, and 0.576 against 0.502 on the adversarial ones; it costs
+single-hop, 0.111 against 0.121. `-blind` empties every graph and changes
+nothing else: the text-ranking arms come back byte-identical and `path` falls
+silent on all 1,986 questions, which is how the two claims are told apart.
+
+The reader turned out to be the larger half of the multi-hop gap. 169 of the 282
+multi-hop answers are lists and `Reply` states at most two pieces of evidence;
+`Gather` states all of them, and on the oracle arm that moves the category from
+0.068 to 0.119 — so the ceiling is what an extractive reader can write, not what
+the memory can find. Walking two or three hops, resolving third-person pronouns
+with `extract.Coref`, and using the temporal bounds were each built, measured
+and dropped: the second hop is worth 0.000 on multi-hop and costs 0.029
+adversarial, coreference reaches 3.1% of sentences and moves multi-hop by 0.000,
+and only 26 of the 282 questions mention time at all.
+
 The metric is ported from `task_eval/evaluation.py`, including the NLTK Porter
 stemmer it calls, and held against it three ways in tests plus once end to end:
 `score.py` runs the official Python over the same predictions and reproduces

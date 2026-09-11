@@ -396,11 +396,17 @@ func (g *Graph) Rank() map[string]float64 {
 	for _, id := range g.ord {
 		rank[id] = share
 	}
+	// A pair joined by two labels is one way for the walker to go, so the
+	// neighbours are taken once each, and taken once for the whole run.
+	outs := make(map[string][]string, n)
+	for _, k := range g.eord {
+		outs[k.from] = keep(outs[k.from], k.to)
+	}
 	for i := 0; i < iterations; i++ {
 		next := make(map[string]float64, n)
 		var loose float64
 		for _, id := range g.ord {
-			out := g.out[id]
+			out := outs[id]
 			if len(out) == 0 {
 				loose += rank[id]
 				continue

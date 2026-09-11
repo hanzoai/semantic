@@ -37,6 +37,7 @@ type Knowledge struct {
 	graph  *kg.Graph
 	mem    *store.Mem       // one vector per piece, filtered by whose it is
 	piece  map[string]Piece // piece id to what it holds
+	at     map[string]int   // turn id to where it is, for a walker citing edges
 	people []string         // every name, longest first
 	claims int
 	facts  int // what the reasoner added on top of what was extracted
@@ -122,6 +123,7 @@ func NewKnowledge(ctx context.Context, s Sample, turns []Turn, words *Words) (*K
 	for i, t := range turns {
 		at[t.ID] = i
 	}
+	k.at = at
 	for _, f := range model.Derived() {
 		// A derived fact holds no turn of its own. The turns it rests on are
 		// the turns behind its premises, so walking the derivation is what
@@ -210,6 +212,17 @@ func (k *Knowledge) file(ctx context.Context, claims []Claim) error {
 	}
 	return nil
 }
+
+// Blind throws the graph away and keeps everything else: the same claims, the
+// same pieces, the same vectors, the same subject resolution.
+//
+// It is the control for the one claim this benchmark is easiest to make
+// dishonestly. A report can build a graph, measure it, print its size and then
+// answer every question by cosine, and nothing in the numbers would say so.
+// Run blind, an arm that reads the graph must collapse and an arm that does
+// not must not move at all; anything else means the code and the table
+// disagree about which is which.
+func (k *Knowledge) Blind() { k.graph = kg.Build(nil) }
 
 // Name is what this arm is called in the results.
 func (k *Knowledge) Name() string { return "graph" }

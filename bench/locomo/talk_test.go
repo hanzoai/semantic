@@ -125,7 +125,7 @@ func TestGraphDoesNotLendOneSpeakersTopicToTheOther(t *testing.T) {
 			t.Errorf("asked about Tim and offered John's turn %q", c.Turn.Text)
 		}
 	}
-	if reply := Reply(about, cites, sure, words, quiz); !declined(reply) {
+	if reply := Reply(context.Background(), about, cites, sure, words, quiz); !declined(reply) {
 		t.Errorf("answered %q; nothing in the conversation says Tim does yoga", reply)
 	}
 
@@ -139,7 +139,7 @@ func TestGraphDoesNotLendOneSpeakersTopicToTheOther(t *testing.T) {
 	if len(cites) == 0 || cites[0].Turn.ID != "D20:2" {
 		t.Fatalf("asked about John and did not offer his own turn: %v", ids(cites))
 	}
-	if reply := Reply(his, cites, sure, words, quiz); declined(reply) {
+	if reply := Reply(context.Background(), his, cites, sure, words, quiz); declined(reply) {
 		t.Error("declined a question its own graph answers")
 	}
 }

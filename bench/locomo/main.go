@@ -1,12 +1,15 @@
-// Command locomo runs the LoCoMo long-conversation recall benchmark over two
-// memories built from the same package: turns in a vector store, and a graph
-// of who said what about whom. Both are asked the dataset's own questions and
-// marked by the dataset's own metric.
+// Command locomo runs the LoCoMo long-conversation recall benchmark over
+// memories built from the same package: turns in a vector store, a graph of who
+// said what about whom indexed by the person a question names, and that graph
+// read by walking it. All are asked the dataset's own questions and marked by
+// the dataset's own metric.
 //
 //	go run ./bench/locomo                    the table
 //	go run ./bench/locomo -show 5            answers, side by side
 //	go run ./bench/locomo -sweep floor       how the answer moves with a setting
-//	go run ./bench/locomo -factor            index unit against subject scope
+//	go run ./bench/locomo -arms factor       index unit against subject scope
+//	go run ./bench/locomo -arms walk         reading the graph against ranking text
+//	go run ./bench/locomo -arms walk -blind  the same, over an emptied graph
 //	go run ./bench/locomo -out bench/locomo/out/answers.json
 //	go run ./bench/locomo -stats bench/locomo/out/answers.json
 //
@@ -35,7 +38,12 @@ type Task struct {
 	Show   int
 	Only   int
 	Quiet  bool
-	Factor bool
+	Arms   string
+	Blind  bool
+	Name   string
+	Base   string
+	Memo   string
+	Closed bool
 }
 
 func main() {
@@ -52,7 +60,12 @@ func main() {
 	flag.IntVar(&t.Show, "show", 0, "print this many answered questions per category")
 	flag.IntVar(&t.Only, "only", 0, "use only the first N conversations, for a quick look")
 	flag.BoolVar(&t.Quiet, "quiet", false, "leave out the per-conversation build lines")
-	flag.BoolVar(&t.Factor, "factor", false, "report the 2x2 of what is indexed against what is reachable")
+	flag.StringVar(&t.Arms, "arms", "main", "which arms to run: main, read (the reader alone, on perfect evidence), factor (index unit against subject scope), or walk (reading the graph against ranking text)")
+	flag.BoolVar(&t.Blind, "blind", false, "empty every graph after building it: the control that says whether the structure is read at all")
+	flag.StringVar(&t.Name, "model", "", "also read each memory's evidence with this model, beside the deterministic reader; the credential is read from HANZO_API_KEY")
+	flag.StringVar(&t.Base, "base", "https://api.hanzo.ai/v1", "the chat-completions endpoint the model is asked through")
+	flag.StringVar(&t.Memo, "memo", "bench/locomo/out/said", "keep the model's answers here, so a run that stopped resumes and a repeat costs nothing")
+	flag.BoolVar(&t.Closed, "closed", false, "add the contamination control: the model asked the same questions with no evidence at all")
 	flag.Parse()
 
 	if err := t.Run(context.Background()); err != nil {
@@ -92,7 +105,7 @@ func (t Task) Run(ctx context.Context) error {
 	if t.Quiet || t.Sweep != "" {
 		log = io.Discard
 	}
-	bench, err := Build(ctx, samples, log, t.Factor)
+	bench, err := Build(ctx, samples, log, t.Arms, t.Blind)
 	if err != nil {
 		return err
 	}
@@ -100,6 +113,27 @@ func (t Task) Run(ctx context.Context) error {
 	fmt.Printf("questions naming a speaker %d/%d (%.1f%%), resolving to any known name %d/%d (%.2f%%)\n",
 		speaker, asked, 100*float64(speaker)/float64(asked),
 		known, asked, 100*float64(known)/float64(asked))
+
+	// The model arms are added to whichever set was built rather than being a
+	// set of their own, so the deterministic column and the model column are
+	// the same memory answering the same question, and the difference between
+	// them is the reader and nothing else.
+	var model Model
+	if t.Name != "" {
+		key := os.Getenv("HANZO_API_KEY")
+		if key == "" {
+			return fmt.Errorf("-model %s needs a credential in HANZO_API_KEY", t.Name)
+		}
+		model = NewModel(t.Base, t.Name, key, t.Memo)
+		for i := range bench {
+			bench[i].Arms = append(bench[i].Arms, twin(bench[i].Arms, model.Read)...)
+			if t.Closed {
+				bench[i].Arms = append(bench[i].Arms,
+					Arm{Name: "closed", Memory: Nothing{}, Read: model.Alone})
+			}
+		}
+		defer func() { fmt.Println(model.Cost()) }()
+	}
 	if t.Sweep != "" {
 		return t.spread(ctx, bench)
 	}

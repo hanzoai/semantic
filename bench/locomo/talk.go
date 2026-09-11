@@ -86,6 +86,13 @@ const told = 0.9
 // who resolves the subject of a sentence and reports where in the sentence it
 // was found, so the verb search can start after it. A sentence that names
 // nobody is about whoever is speaking.
+//
+// Binding the third person as well — running extract.Coref over each session
+// so that "she" reaches the name an earlier turn gave it — was tried and is a
+// wash: it reaches 3.1% of sentences, moves the temporal questions by +0.009
+// and the adversarial ones by -0.006, and moves the multi-hop questions it was
+// meant for by nothing at all. A name folds to one node whichever session it
+// was said in, so the aggregation those questions need was already there.
 func who(words []string, speaker, other string, names map[string]bool) (string, int) {
 	for i, w := range words {
 		switch {

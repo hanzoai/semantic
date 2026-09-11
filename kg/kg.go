@@ -74,8 +74,8 @@ type Graph struct {
 	edge  map[key]*Edge
 	ord   []string // node ids, first asserted first
 	eord  []key    // edge keys, first asserted first
-	out   map[string][]string
-	in    map[string][]string
+	out   map[string][]key
+	in    map[string][]key
 }
 
 // Build folds triples into a graph. Predicates named in types state a node's
@@ -89,8 +89,8 @@ func Build(ts []semantic.Triple, types ...string) *Graph {
 		types: make(map[string]bool, len(types)),
 		node:  map[string]*Node{},
 		edge:  map[key]*Edge{},
-		out:   map[string][]string{},
-		in:    map[string][]string{},
+		out:   map[string][]key{},
+		in:    map[string][]key{},
 	}
 	for _, t := range types {
 		g.types[Fold(t)] = true
@@ -150,8 +150,8 @@ func (g *Graph) link(from, label, to string, score float64, doc string) *Edge {
 		e = &Edge{From: from, To: to, Label: strings.TrimSpace(label)}
 		g.edge[k] = e
 		g.eord = append(g.eord, k)
-		g.out[from] = keep(g.out[from], to)
-		g.in[to] = keep(g.in[to], from)
+		g.out[from] = append(g.out[from], k)
+		g.in[to] = append(g.in[to], k)
 	}
 	e.Count++
 	if score > e.Score {
@@ -214,23 +214,52 @@ func (g *Graph) Edges() []Edge {
 func (g *Graph) Size() (nodes, edges int) { return len(g.ord), len(g.eord) }
 
 // Out lists the nodes this one points at.
-func (g *Graph) Out(id string) []string { return clone(g.out[Fold(id)]) }
+func (g *Graph) Out(id string) []string {
+	var out []string
+	for _, k := range g.out[Fold(id)] {
+		out = keep(out, k.to)
+	}
+	return out
+}
 
 // In lists the nodes that point at this one.
-func (g *Graph) In(id string) []string { return clone(g.in[Fold(id)]) }
+func (g *Graph) In(id string) []string {
+	var out []string
+	for _, k := range g.in[Fold(id)] {
+		out = keep(out, k.from)
+	}
+	return out
+}
+
+// From lists the assertions made out of a node, first asserted first, and To
+// those made into it. Out and In name the far end and nothing else; these
+// carry the label, the confidence and the documents along with it, which is
+// what a caller that means to cite its evidence needs.
+func (g *Graph) From(id string) []Edge { return g.edges(g.out[Fold(id)]) }
+
+// To lists the assertions made into a node.
+func (g *Graph) To(id string) []Edge { return g.edges(g.in[Fold(id)]) }
+
+func (g *Graph) edges(ks []key) []Edge {
+	out := make([]Edge, 0, len(ks))
+	for _, k := range ks {
+		out = append(out, g.edge[k].copy())
+	}
+	return out
+}
 
 // Adj lists the neighbours of a node in either direction, out first.
 func (g *Graph) Adj(id string) []string {
 	id = Fold(id)
 	var out []string
-	for _, n := range g.out[id] {
-		if n != id {
-			out = keep(out, n)
+	for _, k := range g.out[id] {
+		if k.to != id {
+			out = keep(out, k.to)
 		}
 	}
-	for _, n := range g.in[id] {
-		if n != id {
-			out = keep(out, n)
+	for _, k := range g.in[id] {
+		if k.from != id {
+			out = keep(out, k.from)
 		}
 	}
 	return out
@@ -276,8 +305,8 @@ func (g *Graph) pick(want map[string]bool) *Graph {
 		types: g.types,
 		node:  map[string]*Node{},
 		edge:  map[key]*Edge{},
-		out:   map[string][]string{},
-		in:    map[string][]string{},
+		out:   map[string][]key{},
+		in:    map[string][]key{},
 	}
 	for _, id := range g.ord {
 		if !want[id] {
@@ -294,8 +323,8 @@ func (g *Graph) pick(want map[string]bool) *Graph {
 		e := g.edge[k].copy()
 		s.edge[k] = &e
 		s.eord = append(s.eord, k)
-		s.out[k.from] = keep(s.out[k.from], k.to)
-		s.in[k.to] = keep(s.in[k.to], k.from)
+		s.out[k.from] = append(s.out[k.from], k)
+		s.in[k.to] = append(s.in[k.to], k)
 	}
 	return s
 }
@@ -341,7 +370,7 @@ func (g *Graph) Merge(into, from string) bool {
 
 	old, oldOrd := g.edge, g.eord
 	g.edge, g.eord = map[key]*Edge{}, nil
-	g.out, g.in = map[string][]string{}, map[string][]string{}
+	g.out, g.in = map[string][]key{}, map[string][]key{}
 	for _, k := range oldOrd {
 		e := old[k]
 		if k.from == from {
@@ -354,8 +383,8 @@ func (g *Graph) Merge(into, from string) bool {
 		if prior == nil {
 			g.edge[k] = e
 			g.eord = append(g.eord, k)
-			g.out[k.from] = keep(g.out[k.from], k.to)
-			g.in[k.to] = keep(g.in[k.to], k.from)
+			g.out[k.from] = append(g.out[k.from], k)
+			g.in[k.to] = append(g.in[k.to], k)
 			continue
 		}
 		prior.Count += e.Count
@@ -416,4 +445,55 @@ func clone(list []string) []string {
 		return nil
 	}
 	return append([]string(nil), list...)
+}
+
+// Step is one assertion a walk reached and how far out it was reached.
+type Step struct {
+	Edge
+	Hop int
+}
+
+// Walk lists the assertions within hops steps of a node, nearest first.
+//
+// It is the edge-wise counterpart of Near. Near says which nodes lie close and
+// gives them back as a graph; Walk says which assertions do, and an assertion
+// is what carries a label, a confidence and the documents behind it. A caller
+// that walks in order to cite what it found wants the assertions, and building
+// a subgraph to read the edges off it copies the neighbourhood to look at it.
+//
+// Direction is ignored while walking, since an assertion relates both its ends
+// however it happened to be written. Each edge is reported once, at the fewest
+// hops any path reached it. Zero hops, or a node the graph does not hold,
+// walks nowhere.
+func (g *Graph) Walk(id string, hops int) []Step {
+	id = Fold(id)
+	if g.node[id] == nil || hops < 1 {
+		return nil
+	}
+	var out []Step
+	var next []string
+	hop := 1
+	seen := map[key]bool{}
+	at := map[string]bool{id: true}
+	cross := func(k key, far string) {
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, Step{Edge: g.edge[k].copy(), Hop: hop})
+		}
+		if !at[far] {
+			at[far] = true
+			next = append(next, far)
+		}
+	}
+	for front := []string{id}; hop <= hops && len(front) > 0; hop, front, next = hop+1, next, nil {
+		for _, n := range front {
+			for _, k := range g.out[n] {
+				cross(k, k.to)
+			}
+			for _, k := range g.in[n] {
+				cross(k, k.from)
+			}
+		}
+	}
+	return out
 }

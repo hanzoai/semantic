@@ -23,6 +23,13 @@ from scoping retrieval by subject, not from graph structure and not from
 inference — `reason` derives 44 facts from 23,942, which is decoration at this
 scale.
 
+A third memory does read it. **path** stands on the nodes a question names,
+takes the assertions made out of them, gathers those into the relations they
+belong to, and cites the turns behind the relation that fits best. It is the
+one arm here whose answers come out of the structure, and the same emptying
+that leaves every other column untouched leaves this one silent on all 1,986
+questions. It is reported apart, under `-arms walk`.
+
 Two more columns keep the first two readable. **graph+edge** is the same graph
 read differently: the answer comes off the matched edge rather than out of the
 turn it was read from. **oracle** is handed the turns the dataset itself names
@@ -91,7 +98,7 @@ spans rather than whole turns, and it answers only out of the pieces of the
 person a question names rather than out of everything. Two cells cannot tell
 those apart, so here are the other two.
 
-    go run ./bench/locomo -factor
+    go run ./bench/locomo -arms factor
 
 ```
                                graph                scoped                  span                vector
@@ -221,6 +228,93 @@ cannot be matched at all. Silence alone does not buy the result: either arm can
 be made to fall silent as often as you like, and over the range where declining
 is worth anything only one of them falls silent on the right questions.
 
+## Reading the graph instead of ranking text
+
+    go run ./bench/locomo -arms walk
+
+```
+                               graph                oracle            oracle+set                  path              path+set                vector            vector+set
+category           n      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet      F1 recall  quiet
+single hop       841   0.121  0.507    24%   0.199  1.000    42%   0.203  1.000    42%   0.111  0.467    27%   0.049  0.467    24%   0.118  0.546    20%   0.089  0.546    12%
+multi hop        282   0.020  0.228    18%   0.068  0.973    44%   0.119  0.973    44%   0.032  0.222    26%   0.071  0.222    25%   0.023  0.194    17%   0.066  0.194    13%
+temporal         321   0.338  0.532    23%   0.379  0.997    33%   0.379  0.997    33%   0.353  0.512    21%   0.354  0.512    21%   0.357  0.581    16%   0.356  0.581    15%
+open domain       96   0.018  0.238    56%   0.032  0.951    79%   0.036  0.951    78%   0.016  0.213    61%   0.024  0.213    60%   0.016  0.258    45%   0.017  0.258    36%
+adversarial      446   0.502  0.135    50%   0.426  1.000    43%   0.426  1.000    43%   0.576  0.130    58%   0.563  0.130    56%   0.200  0.511    20%   0.128  0.511    13%
+answerable      1540   0.142  0.444    25%   0.202  0.991    43%   0.214  0.991    43%   0.141  0.415    28%   0.115  0.415    26%   0.144  0.471    20%   0.136  0.471    15%
+overall         1986   0.223  0.375    31%   0.252  0.993    43%   0.262  0.993    43%   0.239  0.351    34%   0.216  0.351    33%   0.156  0.480    20%   0.134  0.480    14%
+```
+
+Two changes are crossed here, and they are the two halves of what a multi-hop
+question needs. `path` is the memory: relations instead of nearest turns. `+set`
+is the reader: `Gather` states every piece of evidence the memory returned
+rather than the best one or two, so the width of an answer is decided by the
+memory alone. Both are available to every arm, which is what makes the columns
+comparable.
+
+**The memory.** On the multi-hop questions `path` scores 0.032 against `graph`'s
+0.020 and `vector`'s 0.023, with the same reader and near-identical evidence
+recall — 0.222 against 0.228. It is not finding more of the evidence. It is
+citing a different five turns out of the same reach, and the difference is that
+the five best turns by wording are five sayings of one thing while the five best
+relations are five things. It is also better at silence: 0.576 adversarial
+against 0.502, because an assertion about the wrong person is not reached from
+the right person's node at all.
+
+**The reader.** `+set` is worth more than the memory and is worth it in exactly
+one category. Multi-hop goes 0.023 → 0.066 on `vector`, 0.032 → 0.071 on `path`,
+and — the number that says what kind of bound this is — **0.068 → 0.119 on
+`oracle`**, which is handed the annotated evidence. Perfect retrieval read the
+old way scored 0.068; perfect retrieval read this way scores 0.119. The ceiling
+moved, so a retrieval result can now show up underneath it, and `path`'s does.
+
+**And it is a trade, not a gain.** Single-hop falls 0.111 → 0.049 on `path` and
+0.118 → 0.089 on `vector`; adversarial falls 0.200 → 0.128 on `vector`. The
+metric is asymmetric and that is the whole of the explanation: a category 1
+answer is marked part by part, so a reply part that matches nothing costs
+nothing, while every other answerable category is marked as one bag of tokens,
+where it costs precision. Listing everything you have is free where the answer
+is a list and expensive where it is not.
+
+### The control
+
+    go run ./bench/locomo -arms walk -blind
+
+`-blind` empties every graph after building it and changes nothing else — same
+claims, same pieces, same vectors, same subject resolution. `graph`, `vector`,
+`oracle` and both `+set` columns come back byte-identical. `path` and `path+set`
+go to 100% quiet, 0.000 evidence recall, 0.004 on the answerable questions and
+0.228 overall, which is what constant abstention scores. That is the whole
+difference between a report that mentions a graph and a report that reads one,
+and it is a flag rather than a paragraph so that anybody can check it.
+
+### How far to walk
+
+Two and three hops were built and measured, guided — a hop taken only through a
+node the question mentions something of — and unguided. Every arm below is read
+with `Gather`, including `graph`, so that the only thing varying across the
+columns is how far the walk goes; that is why the figures differ from the table
+above, where `graph` and `path` are read with `Reply`.
+
+```
+                               graph                  path                 path2                 path3                 walk2                 walk3
+multi hop        282   0.064  0.228    17%   0.071  0.222    25%   0.071  0.223    25%   0.071  0.223    25%   0.074  0.229    20%   0.071  0.226    19%
+adversarial      446   0.484  0.135    48%   0.563  0.130    56%   0.534  0.150    53%   0.534  0.150    53%   0.305  0.351    30%   0.258  0.404    26%
+overall         1986   0.194  0.375    29%   0.216  0.351    33%   0.209  0.357    32%   0.209  0.357    32%   0.159  0.404    25%   0.148  0.420    23%
+```
+
+The second hop moves multi-hop by 0.000 guided and 0.003 unguided, and costs
+0.029 and 0.258 on the adversarial questions. The third moves nothing at three
+decimals either way. Reach was never the constraint. Over all ten
+conversations, one hop from the node a question names reaches 90.1% of the
+multi-hop evidence and 84.9–88.0% of the evidence for the other answerable
+categories, against 34.0% of the adversarial evidence — and two hops reach
+95.4% of the adversarial evidence, which is exactly the trap those questions are
+built around. `reach_test.go` asserts that shape on the first two conversations,
+where it is the same and runs in six seconds. Going further out only makes more
+to choose from. So the arm walks one hop and the hop setting is gone; this table
+is the reason, and the code says it rather than carrying a knob nobody should
+turn.
+
 ## Where the graph does not win
 
 **Multi-hop.** The expectation going in was that multi-hop favours a graph,
@@ -229,9 +323,30 @@ several edges here. Retrieval bears that out — recall 0.228 against 0.194 at
 k=5, and 0.419 against 0.388 under `-k 20 -parts 4 -band 0.5`, the settings
 that let an answer be a list. F1 does not move with it: 0.020 against 0.023,
 and 0.053 against 0.057. Gathering the turns is not the hard part of a
-multi-hop answer; assembling four phrases from four sessions into one list is,
-and an extractive reader cannot. The oracle scores 0.068 with perfect evidence,
-which is the ceiling this reader puts on the category.
+multi-hop answer; assembling four phrases from four sessions into one list is.
+
+Both halves of that were then taken apart, and the section above has the
+result. 169 of the 282 multi-hop answers are comma-separated lists, and `Reply`
+states at most two pieces of evidence, so the reader was throwing the shape of
+the answer away before retrieval got a say: handed the annotated evidence and
+allowed to state all of it, the oracle goes 0.068 → 0.119. Underneath that
+raised ceiling `path` scores 0.032 against 0.020 by citing relations rather than
+turns, and 0.071 with the wider reader. The ceiling is still overwhelmingly the
+reader — 0.119 with perfect evidence means 88% of the distance to 1.0 is what an
+extractive reader cannot write, and the last column of `-arms read` is where a
+model reader has to answer for that.
+
+Two things that looked like they should help do not. **Time**: `extract.Link`
+carries `From`, and every claim here is dated by its session, but only 26 of the
+282 multi-hop questions contain a word about time at all, so there is no surface
+for the temporal machinery to work on — the strength of the temporal category
+(0.338) does not transfer. **Coreference**: `extract.Coref` over each session,
+so that "she" reaches the name an earlier turn gave it, was wired in and
+measured. It reaches 3.1% of sentences and moves temporal by +0.009, adversarial
+by -0.006, multi-hop by 0.000 and the overall figure by -0.001. A name already
+folds to one node whichever session it was said in, so the cross-session
+aggregation those questions need was there before the pronouns were. The code
+was taken back out.
 
 **Answering off an edge.** `graph+edge` reads the answer from the matched edge —
 the object phrase the extractor produced — instead of quoting the turn. It is
@@ -266,9 +381,10 @@ locomo.go   the dataset: sessions in order, dates parsed, evidence ids
 talk.go     reading dialogue: who a sentence is about, and what it claims
 graph.go    the graph arm: claims -> kg -> reason -> a store filtered by person
 vector.go   the baseline: one weighted vector per turn
+path.go     the walk arm: relations off the nodes a question names
 oracle.go   the arm that cheats, to bound the reader
 terms.go    one vocabulary, weighed once, shared by everything
-read.go     the reader, shared by every arm
+read.go     the readers, shared by every arm
 metric.go   the official metric, ported
 porter.go   the stemmer the official metric runs
 factor.go   the other two cells: turns scoped, spans unscoped
@@ -376,7 +492,9 @@ here for that reason; the bound is ours, not the scorer's.
 go run ./bench/locomo                        # the table above
 go run ./bench/locomo -show 5                # answers, side by side, per category
 go run ./bench/locomo -sweep floor           # or k, span, band, parts
-go run ./bench/locomo -factor                # index unit against subject scope
+go run ./bench/locomo -arms factor           # index unit against subject scope
+go run ./bench/locomo -arms walk             # reading the graph against ranking text
+go run ./bench/locomo -arms walk -blind      # the same, over an emptied graph
 go run ./bench/locomo -k 2000 -floor 0       # what each index can reach
 go run ./bench/locomo -out bench/locomo/out/answers.json
 go run ./bench/locomo -stats bench/locomo/out/answers.json
@@ -386,8 +504,8 @@ go test ./bench/locomo/
 `-stats` reads a predictions file back and reports the three things the table
 cannot show: what constant abstention scores, how far each arm's confidence
 tells an answerable question from an adversarial one, and the paired difference
-between every pair of arms with its bootstrap interval. Every flag above also
-takes `-factor`, which swaps `graph+edge` and `oracle` for `scoped` and `span`.
+between every pair of arms with its bootstrap interval. `-arms` chooses which
+memories a run builds and every other flag applies to whichever set it names.
 
 Run from the repository root, and with `GOWORK=off` if a parent `go.work` is in
 the way. Reading ten conversations into both memories and answering 1,986

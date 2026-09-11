@@ -257,6 +257,68 @@ func TestTraversal(t *testing.T) {
 	}
 }
 
+// Out and In name the far end of an assertion and nothing else. From and To
+// hand back the assertion itself, which is what a caller that means to cite
+// its evidence needs: the label it was made under, and the documents it was
+// made in.
+func TestFromAndToCarryTheAssertion(t *testing.T) {
+	g := Build([]semantic.Triple{
+		tri("A", "likes", "B", 0.9, "d1"),
+		tri("A", "likes", "C", 0.8, "d2"),
+		tri("D", "knows", "A", 0.7, "d3"),
+	})
+	out := g.From("A")
+	if len(out) != 2 {
+		t.Fatalf("From(A) = %d assertions, want 2", len(out))
+	}
+	if out[0].Label != "likes" || out[0].To != "b" || !reflect.DeepEqual(out[0].Docs, []string{"d1"}) {
+		t.Errorf("From(A)[0] = %+v, want the likes-B assertion made in d1", out[0])
+	}
+	in := g.To("A")
+	if len(in) != 1 || in[0].From != "d" || in[0].Label != "knows" {
+		t.Errorf("To(A) = %+v, want the one assertion made into A", in)
+	}
+	if got := g.From("nobody"); len(got) != 0 {
+		t.Errorf("From of an unknown node = %v, want none", got)
+	}
+	// A copy, like Nodes and Edges: writing to what a traversal returned must
+	// not reach the graph.
+	out[0].Label = "loathes"
+	if again := g.From("A"); again[0].Label != "likes" {
+		t.Error("writing to an assertion From returned reached the graph")
+	}
+}
+
+// Walk is the edge-wise counterpart of Near: which assertions lie within so
+// many hops, each reported once, at the fewest hops any path reached it.
+// Direction is ignored, since an assertion relates both its ends however it
+// happened to be written.
+//
+// Over two triangles joined by a bridge, standing on 1: one hop takes the two
+// assertions 1 is an end of, the second closes its triangle and crosses the
+// bridge, the third reaches two sides of the far triangle, and the fourth its
+// last side.
+func TestWalk(t *testing.T) {
+	g := cliques()
+	for _, c := range []struct {
+		hops  int
+		edges int
+	}{{0, 0}, {1, 2}, {2, 4}, {3, 6}, {4, 7}} {
+		got := g.Walk("1", c.hops)
+		if len(got) != c.edges {
+			t.Errorf("Walk(1, %d) reached %d assertions, want %d", c.hops, len(got), c.edges)
+		}
+		for _, s := range got {
+			if s.Hop < 1 || s.Hop > c.hops {
+				t.Errorf("Walk(1, %d) reported %+v at hop %d", c.hops, s.Edge, s.Hop)
+			}
+		}
+	}
+	if got := g.Walk("nobody", 2); got != nil {
+		t.Errorf("Walk of an unknown node = %v, want nil", got)
+	}
+}
+
 func TestSubIsTheInducedSubgraph(t *testing.T) {
 	s := cliques().Sub("1", "2", "3", "4")
 	nodes, edges := s.Size()

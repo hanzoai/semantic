@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -45,7 +46,7 @@ func TestReplyReadsTheCalendar(t *testing.T) {
 			turn := Turn{ID: "D1:1", Who: "Evan", Text: c.text, Date: may}
 			words := Vocabulary([]Turn{turn})
 			cites := []Cite{{Turn: turn, Score: 1}}
-			if got := Reply(c.question, cites, 1, words, quiz); got != c.want {
+			if got := Reply(context.Background(), c.question, cites, 1, words, quiz); got != c.want {
 				t.Errorf("answered %q, wanted %q", got, c.want)
 			}
 		})
@@ -54,11 +55,11 @@ func TestReplyReadsTheCalendar(t *testing.T) {
 
 func TestReplyDeclines(t *testing.T) {
 	words := Vocabulary([]Turn{{ID: "D1:1", Text: "Nothing to see."}})
-	if got := Reply("What did Evan eat?", nil, 0, words, quiz); !declined(got) {
+	if got := Reply(context.Background(), "What did Evan eat?", nil, 0, words, quiz); !declined(got) {
 		t.Errorf("answered %q with no evidence at all", got)
 	}
 	cites := []Cite{{Turn: Turn{ID: "D1:1", Text: "Nothing to see."}, Score: 1}}
-	if got := Reply("What did Evan eat?", cites, 0.1, words, quiz); !declined(got) {
+	if got := Reply(context.Background(), "What did Evan eat?", cites, 0.1, words, quiz); !declined(got) {
 		t.Errorf("answered %q from evidence it was 10%% sure of, under a floor of %v", got, quiz.Floor)
 	}
 }
@@ -73,7 +74,7 @@ func TestReplyQuotesWhatWasAsked(t *testing.T) {
 	}
 	vocab := Vocabulary(turns)
 	cites := []Cite{{Turn: turns[0], Score: 1}}
-	got := Reply("What are the names of Jolene's snakes?", cites, 1, vocab, quiz)
+	got := Reply(context.Background(), "What are the names of Jolene's snakes?", cites, 1, vocab, quiz)
 	said := words(got)
 	for _, name := range []string{"susie", "seraphim"} {
 		if !contains(said, name) {

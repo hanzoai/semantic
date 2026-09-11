@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // The experiment. Every arm sees the same conversations, is asked the same
@@ -21,14 +22,14 @@ type Options struct {
 	Parts int     // how many pieces of evidence the answer may draw on
 }
 
-// Arm is one memory read one way. Three of the four arms read their evidence
-// the same way and differ only in the memory behind it; graph+edge shares the
-// graph's memory and reads the answer off the matched edge instead of out of
-// the turn the edge came from.
+// Arm is one memory read one way. The memory decides which turns come back
+// and the reader decides what is written from them, and an arm is one of each,
+// so a new way of remembering and a new way of reading are the same kind of
+// change to the run rather than two.
 type Arm struct {
 	Name   string
 	Memory Memory
-	Edge   bool
+	Read   Reader
 }
 
 // Record is one question, answered.
@@ -150,11 +151,16 @@ type Case struct {
 	Arms   []Arm
 }
 
-// Build reads every conversation into every memory. With factor set it builds
-// the 2x2 of what is indexed against what is reachable instead of the four
-// arms, which is what says whether the result belongs to the claim spans or to
-// the subject scope.
-func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (Bench, error) {
+// Build reads every conversation into every memory.
+//
+// Which memories are built is named rather than switched: an arm set is a
+// question the run is asking, and the three of them ask different ones. main
+// compares the two memories and the two ways of reading the graph; factor
+// splits the graph's advantage into the 2x2 of what is indexed against what is
+// reachable; walk asks whether following the graph's edges beats ranking text,
+// which is the one thing none of the other arms does. read drops the memories
+// altogether and measures the reader against perfect evidence.
+func Build(ctx context.Context, samples []Sample, log io.Writer, set string, blind bool) (Bench, error) {
 	var out Bench
 	var turns, claims, nodes, edges, facts int
 	for _, s := range samples {
@@ -171,22 +177,51 @@ func Build(ctx context.Context, samples []Sample, log io.Writer, factor bool) (B
 			s.ID, len(s.Turns), words.Size(), graph.Claims(), graph.Nodes(), graph.Edges(), graph.Facts())
 		turns, claims = turns+len(s.Turns), claims+graph.Claims()
 		nodes, edges, facts = nodes+graph.Nodes(), edges+graph.Edges(), facts+graph.Facts()
-		arms := []Arm{
-			{Name: "vector", Memory: vector},
-			{Name: "graph", Memory: graph},
-			{Name: "graph+edge", Memory: graph, Edge: true},
-			{Name: "oracle", Memory: NewOracle(s, words)},
+		if blind {
+			graph.Blind()
 		}
-		if factor {
+		var arms []Arm
+		switch set {
+		case "read":
+			// The ceiling on its own. Every other set measures a memory; this
+			// one hands the reader the evidence the dataset itself names and
+			// so measures the reader, which is the bound the rest of the
+			// table sits under. It is the cheapest set to put a model behind,
+			// and the first worth putting one behind: if a better reader
+			// cannot move the number here, it cannot move it anywhere.
+			oracle := NewOracle(s, words)
+			arms = []Arm{
+				{Name: "oracle", Memory: oracle, Read: Reply},
+				{Name: "oracle+set", Memory: oracle, Read: Gather},
+			}
+		case "factor":
 			scoped, err := NewScoped(ctx, graph)
 			if err != nil {
 				return nil, err
 			}
 			arms = []Arm{
-				{Name: "vector", Memory: vector},
-				{Name: "scoped", Memory: scoped},
-				{Name: "span", Memory: Flat{graph}},
-				{Name: "graph", Memory: graph},
+				{Name: "vector", Memory: vector, Read: Reply},
+				{Name: "scoped", Memory: scoped, Read: Reply},
+				{Name: "span", Memory: Flat{graph}, Read: Reply},
+				{Name: "graph", Memory: graph, Read: Reply},
+			}
+		case "walk":
+			path, oracle := NewPath(graph), NewOracle(s, words)
+			arms = []Arm{
+				{Name: "vector", Memory: vector, Read: Reply},
+				{Name: "vector+set", Memory: vector, Read: Gather},
+				{Name: "graph", Memory: graph, Read: Reply},
+				{Name: "path", Memory: path, Read: Reply},
+				{Name: "path+set", Memory: path, Read: Gather},
+				{Name: "oracle", Memory: oracle, Read: Reply},
+				{Name: "oracle+set", Memory: oracle, Read: Gather},
+			}
+		default:
+			arms = []Arm{
+				{Name: "vector", Memory: vector, Read: Reply},
+				{Name: "graph", Memory: graph, Read: Reply},
+				{Name: "graph+edge", Memory: graph, Read: Recite},
+				{Name: "oracle", Memory: NewOracle(s, words), Read: Reply},
 			}
 		}
 		out = append(out, Case{Sample: s, Words: words, Know: graph, Arms: arms})
@@ -228,43 +263,72 @@ type answer struct {
 // Run puts every question of every conversation to every arm and returns what
 // each scored and what each answered.
 func (b Bench) Run(ctx context.Context, o Options) (map[string]*Tally, map[string][]Record, error) {
+	// Conversations share nothing — their own turns, their own vocabulary,
+	// their own memories — so they are answered at the same time and merged in
+	// the order they were read. Nothing about the result depends on that: the
+	// merge restores the order a single-file run would have produced, question
+	// by question and arm by arm. It is only that a reader with a network
+	// behind it spends its whole run waiting, and there are ten conversations
+	// to wait for at once.
+	done := make([]map[string][]Record, len(b))
+	fail := make([]error, len(b))
+	var wg sync.WaitGroup
+	for i, c := range b {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			done[i], fail[i] = c.ask(ctx, o)
+		}()
+	}
+	wg.Wait()
+
 	tallies := map[string]*Tally{}
 	records := map[string][]Record{}
-	for _, c := range b {
-		for _, ask := range c.Sample.Asks {
-			// Two arms share the graph and differ only in how it is read, so
-			// the question is put to each memory once.
-			asked := map[string]answer{}
-			for _, arm := range c.Arms {
-				got, done := asked[arm.Memory.Name()]
-				if !done {
-					cites, err := arm.Memory.Recall(ctx, ask.Text, o.K)
-					if err != nil {
-						return nil, nil, err
-					}
-					got = answer{cites, Sure(c.Words, ask.Text, cites)}
-					asked[arm.Memory.Name()] = got
-				}
-				reply := Reply(ask.Text, got.cites, got.sure, c.Words, o)
-				if arm.Edge {
-					reply = Recite(ask.Text, got.cites, got.sure, c.Words, o)
-				}
-				r := Record{
-					Sample: c.Sample.ID, Question: ask.Text, Answer: ask.Answer,
-					Kind: ask.Kind, Evidence: ask.Evidence,
-					Reply: reply, Context: ids(got.cites), Sure: got.sure,
-					Score:  grade(ask.Kind, reply, ask.Answer),
-					Recall: found(ask.Evidence, ids(got.cites)),
-				}
-				if tallies[arm.Name] == nil {
-					tallies[arm.Name] = NewTally()
-				}
-				tallies[arm.Name].Add(r)
-				records[arm.Name] = append(records[arm.Name], r)
+	for i, got := range done {
+		if fail[i] != nil {
+			return nil, nil, fail[i]
+		}
+		for _, arm := range b[i].Arms {
+			if tallies[arm.Name] == nil {
+				tallies[arm.Name] = NewTally()
 			}
+			for _, r := range got[arm.Name] {
+				tallies[arm.Name].Add(r)
+			}
+			records[arm.Name] = append(records[arm.Name], got[arm.Name]...)
 		}
 	}
 	return tallies, records, nil
+}
+
+// ask puts every question of one conversation to every one of its arms.
+func (c Case) ask(ctx context.Context, o Options) (map[string][]Record, error) {
+	out := make(map[string][]Record, len(c.Arms))
+	for _, ask := range c.Sample.Asks {
+		// Two arms share the graph and differ only in how it is read, so
+		// the question is put to each memory once.
+		asked := map[string]answer{}
+		for _, arm := range c.Arms {
+			got, done := asked[arm.Memory.Name()]
+			if !done {
+				cites, err := arm.Memory.Recall(ctx, ask.Text, o.K)
+				if err != nil {
+					return nil, err
+				}
+				got = answer{cites, Sure(c.Words, ask.Text, cites)}
+				asked[arm.Memory.Name()] = got
+			}
+			reply := arm.Read(ctx, ask.Text, got.cites, got.sure, c.Words, o)
+			out[arm.Name] = append(out[arm.Name], Record{
+				Sample: c.Sample.ID, Question: ask.Text, Answer: ask.Answer,
+				Kind: ask.Kind, Evidence: ask.Evidence,
+				Reply: reply, Context: ids(got.cites), Sure: got.sure,
+				Score:  grade(ask.Kind, reply, ask.Answer),
+				Recall: found(ask.Evidence, ids(got.cites)),
+			})
+		}
+	}
+	return out, nil
 }
 
 // trim drops the brackets the dataset puts round some of its evidence ids.

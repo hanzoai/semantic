@@ -19,7 +19,7 @@ $(OUT):
 	cd $(ROOT) && $(GO) run ./bench/locomo -out bench/locomo/$(OUT)
 
 $(CELLS):
-	cd $(ROOT) && $(GO) run ./bench/locomo -factor -out bench/locomo/$(CELLS)
+	cd $(ROOT) && $(GO) run ./bench/locomo -arms factor -out bench/locomo/$(CELLS)
 
 sweeps:
 	cd $(ROOT) && for s in floor k span band parts; do $(GO) run ./bench/locomo -sweep $$s; done

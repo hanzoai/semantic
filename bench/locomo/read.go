@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,16 +15,25 @@ import (
 // results differ, they differ because one memory found better turns, not
 // because it was read differently.
 //
-// There is no model behind it. A model would answer better and would also make
-// the comparison a comparison of two prompts; with a fixed reader, the numbers
-// move only when the memory moves.
+// Reply and Recite have no model behind them, which is what makes a run
+// repeatable without a credential and what the deterministic columns of the
+// report are. It is also a ceiling: handed the dataset's own annotated
+// evidence, Reply reaches 0.202 on the answerable questions, so those columns
+// measure the reader at least as much as they measure the memory. model.go
+// puts a model behind the same interface to say how much.
+
+// Reader writes the answer to a question from the evidence a memory returned.
+// It is a value an arm carries rather than a branch inside the run, so a new
+// way of reading is a new arm and not a new flag. The context is here for the
+// one reader that leaves the machine; the two below ignore it.
+type Reader func(ctx context.Context, question string, cites []Cite, sure float64, w *Words, o Options) string
 
 // Reply writes the answer to a question from the evidence a memory returned.
 // Below floor the memory is saying it does not have the answer, and the reply
 // says so — which is the correct reply to an adversarial question and the
 // wrong one to every other kind, so the floor is a real trade and is swept
 // rather than assumed.
-func Reply(question string, cites []Cite, sure float64, w *Words, o Options) string {
+func Reply(ctx context.Context, question string, cites []Cite, sure float64, w *Words, o Options) string {
 	if len(cites) == 0 || sure < o.Floor {
 		return Decline
 	}
@@ -135,21 +145,59 @@ func dated(c Cite, w *Words, question string) string {
 // is the same memory as the strict arm and a different way of reading it, so
 // the difference between the two columns is worth exactly what an answer read
 // off an edge is worth over an answer read off a turn.
-func Recite(question string, cites []Cite, sure float64, w *Words, o Options) string {
+func Recite(ctx context.Context, question string, cites []Cite, sure float64, w *Words, o Options) string {
+	return recite(question, cites, sure, w, o, o.Parts, o.Band)
+}
+
+// Gather states everything the memory returned, one piece per turn, and is the
+// reader for a question whose answer is a list.
+//
+// Reply and Recite keep an answer short with two settings of their own — at
+// most parts pieces, and none below band of the best one's score — so the
+// width of an answer is decided twice, once by the memory choosing what to
+// return and again by the reader choosing what to use. Gather decides it once.
+// The memory says what the evidence is and the reader says all of it, which
+// puts the question of how wide an answer should run where it belongs: a
+// memory that hands back five turns for a question with one answer has made
+// the mistake, and the reader no longer hides it.
+//
+// The metric is not symmetric about this. A category 1 answer is marked part
+// by part — each part of the reference takes the closest part of the reply,
+// and a reply part that matches nothing costs nothing — while every other
+// answerable category is marked as one bag of tokens, where a part that
+// matches nothing costs precision. So the trade has a known sign in both
+// directions and both are reported.
+func Gather(ctx context.Context, question string, cites []Cite, sure float64, w *Words, o Options) string {
+	return recite(question, cites, sure, w, o, len(cites), 0)
+}
+
+// recite writes the answer from what the memory matched inside each turn, up
+// to parts of them and down to band of the best one's score.
+//
+// A memory that indexes turns has nothing matched to offer, so the sentence
+// that covers most of the question stands in for it. That fallback is what
+// lets the same reader run over every arm: the reader asks each memory what it
+// matched and takes the turn's own words when the answer is nothing.
+func recite(question string, cites []Cite, sure float64, w *Words, o Options, parts int, band float64) string {
 	if len(cites) == 0 || sure < o.Floor {
 		return Decline
 	}
 	if asking(question) == "when" {
 		return dated(cites[0], w, question)
 	}
+	focus := w.Focus(question, "")
 	asked := unique(stems(question))
 	var out []string
 	for _, c := range cites {
-		if c.Score < cites[0].Score*o.Band || len(out) == o.Parts {
+		if c.Score < cites[0].Score*band || len(out) == parts {
 			break
 		}
+		say := c.Say
+		if say == "" {
+			say = span(c.Turn.Text, focus, asked, w, o.Span)
+		}
 		var kept []string
-		for _, word := range words(c.Say) {
+		for _, word := range words(say) {
 			if stop[word] || asked[stem(word)] {
 				continue
 			}
@@ -159,7 +207,7 @@ func Recite(question string, cites []Cite, sure float64, w *Words, o Options) st
 		if s == "" {
 			// Everything the graph matched was a word the question already
 			// held. What it matched is still the answer it has.
-			s = c.Say
+			s = say
 		}
 		if s != "" && !contains(out, s) {
 			out = append(out, s)
