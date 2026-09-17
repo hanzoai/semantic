@@ -30,10 +30,7 @@ func (c Chars) spans(text string) []span {
 	if c.Size <= 0 {
 		return []span{{0, len(text)}}
 	}
-	step := c.Size - c.Overlap
-	if step < 1 {
-		step = 1
-	}
+	step := max(c.Size-c.Overlap, 1)
 	var out []span
 	for start := 0; start < len(text); {
 		end := advance(text, start, c.Size)

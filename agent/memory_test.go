@@ -47,7 +47,7 @@ func TestWindowIsBoundedBySize(t *testing.T) {
 	m := &Memory{Window: 10, Budget: 20}
 	long := func(n int) string {
 		s := ""
-		for i := 0; i < n; i++ {
+		for range n {
 			s += "x"
 		}
 		return s

@@ -72,7 +72,7 @@ func TestAddIsUpsert(t *testing.T) {
 
 func TestJoinMakesEndsAndMerges(t *testing.T) {
 	var g Graph
-	if !g.Join(Edge{Link: Link{From: "a", To: "b", Label: "knows"}, Weight: 0.5}) {
+	if !g.Join(Edge{From: "a", To: "b", Label: "knows", Weight: 0.5}) {
 		t.Fatal("first Join reported the edge was not new")
 	}
 	for _, id := range []string{"a", "b"} {
@@ -84,7 +84,7 @@ func TestJoinMakesEndsAndMerges(t *testing.T) {
 			t.Errorf("created end %s has kind %q, want entity", id, n.Kind)
 		}
 	}
-	if g.Join(Edge{Link: Link{From: "a", To: "b", Label: "knows"}, Weight: 0.9}) {
+	if g.Join(Edge{From: "a", To: "b", Label: "knows", Weight: 0.9}) {
 		t.Error("the same assertion twice reported a new edge")
 	}
 	e, _ := g.Edge(Link{From: "a", To: "b", Label: "knows"})
@@ -94,7 +94,7 @@ func TestJoinMakesEndsAndMerges(t *testing.T) {
 	if n := len(g.Edges("")); n != 1 {
 		t.Errorf("graph holds %d edges, want 1", n)
 	}
-	if e := (Edge{Link: Link{From: "a", To: "c"}}); !g.Join(e) {
+	if e := (Edge{From: "a", To: "c"}); !g.Join(e) {
 		t.Error("an edge with no label was refused")
 	}
 	if e, _ := g.Edge(Link{From: "a", To: "c", Label: About}); e.Weight != 1 {
@@ -109,8 +109,8 @@ func TestAtIsTheGraphAsItStood(t *testing.T) {
 	g.Add(Node{ID: "a", Text: "always"})
 	g.Add(Node{ID: "b", Text: "later", Span: Span{From: at(5)}})
 	g.Add(Node{ID: "c", Text: "gone", Span: Span{Until: at(2)}})
-	g.Join(Edge{Link: Link{From: "a", To: "b", Label: "knows"}})
-	g.Join(Edge{Link: Link{From: "a", To: "c", Label: "knew"}})
+	g.Join(Edge{From: "a", To: "b", Label: "knows"})
+	g.Join(Edge{From: "a", To: "c", Label: "knew"})
 
 	nodes, edges := g.At(at(3))
 	if got := ids(nodes); !reflect.DeepEqual(got, []string{"a"}) {
@@ -132,7 +132,7 @@ func TestRetractClosesAndCascades(t *testing.T) {
 	var g Graph
 	g.Add(Node{ID: "a", Text: "account"})
 	g.Add(Node{ID: "b", Text: "owner"})
-	g.Join(Edge{Link: Link{From: "a", To: "b", Label: "held_by"}})
+	g.Join(Edge{From: "a", To: "b", Label: "held_by"})
 
 	if !g.Retract("a", "closed", at(5)) {
 		t.Fatal("Retract reported nothing to retract")
@@ -177,7 +177,7 @@ func TestRetractKeepsAnEarlierEnd(t *testing.T) {
 func TestPurgeLeavesOnlyTheNote(t *testing.T) {
 	var g Graph
 	g.Add(Node{ID: "a", Text: "personal"})
-	g.Join(Edge{Link: Link{From: "a", To: "b", Label: "about"}})
+	g.Join(Edge{From: "a", To: "b", Label: "about"})
 	if !g.Purge("a", "erasure", at(5)) {
 		t.Fatal("Purge reported nothing to purge")
 	}
@@ -229,8 +229,8 @@ func TestStats(t *testing.T) {
 	g.Add(Node{ID: "a", Kind: "person"})
 	g.Add(Node{ID: "b", Kind: "person"})
 	g.Add(Node{ID: "c", Kind: "place"})
-	g.Join(Edge{Link: Link{From: "a", To: "b", Label: "knows"}})
-	g.Join(Edge{Link: Link{From: "a", To: "c", Label: "lives"}})
+	g.Join(Edge{From: "a", To: "b", Label: "knows"})
+	g.Join(Edge{From: "a", To: "c", Label: "lives"})
 
 	s := g.Stats()
 	if s.Nodes != 3 || s.Edges != 2 {
@@ -274,7 +274,7 @@ func TestWatchSeesEveryChange(t *testing.T) {
 	g.Watch = func(c Change) { seen = append(seen, c) }
 
 	g.Add(Node{ID: "a"})
-	g.Join(Edge{Link: Link{From: "a", To: "b", Label: "knows"}})
+	g.Join(Edge{From: "a", To: "b", Label: "knows"})
 	g.Retract("a", "", at(5))
 	g.Purge("b", "", at(6))
 

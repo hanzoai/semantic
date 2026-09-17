@@ -2,6 +2,7 @@ package ontology
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -763,9 +764,7 @@ func (s Schema) Turtle() string {
 		"rdfs": Standard["rdfs"],
 		"xsd":  Standard["xsd"],
 	}
-	for p, iri := range s.Prefixes {
-		prefixes[p] = iri
-	}
+	maps.Copy(prefixes, s.Prefixes)
 	fmt.Fprintf(&b, "@prefix : <%s> .\n", ns.Root())
 	for _, p := range sorted(prefixes) {
 		fmt.Fprintf(&b, "@prefix %s: <%s> .\n", p, prefixes[p])

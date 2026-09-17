@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -301,10 +302,5 @@ func (s Schema) Keep(x Set) Set {
 }
 
 func has(list []string, name string) bool {
-	for _, n := range list {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, name)
 }

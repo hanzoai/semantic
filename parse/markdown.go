@@ -123,7 +123,7 @@ func matter(s string) (map[string]string, string) {
 		return nil, s
 	}
 	tags := map[string]string{}
-	for _, line := range strings.Split(rest[:end], "\n") {
+	for line := range strings.SplitSeq(rest[:end], "\n") {
 		k, v, ok := strings.Cut(line, ":")
 		if !ok || strings.TrimSpace(k) == "" {
 			continue
@@ -238,7 +238,7 @@ func scan(line string, links, imgs *[]ref) {
 			}
 			u := line[i+1 : i+j]
 			if strings.Contains(u, "://") || strings.HasPrefix(u, "mailto:") {
-				*links = append(*links, ref{Link: Link{Text: u, URL: u}})
+				*links = append(*links, ref{Text: u, URL: u})
 				i += j
 			}
 		case '[':
@@ -266,7 +266,7 @@ func scan(line string, links, imgs *[]ref) {
 				if sp := strings.IndexAny(dest, " \t"); sp >= 0 {
 					dest = dest[:sp]
 				}
-				r = ref{Link: Link{Text: text, URL: strings.Trim(dest, "<>")}}
+				r = ref{Text: text, URL: strings.Trim(dest, "<>")}
 				j += k
 			case j < len(line) && line[j] == '[':
 				k := strings.IndexByte(line[j:], ']')
@@ -277,7 +277,7 @@ func scan(line string, links, imgs *[]ref) {
 				if label == "" {
 					label = text
 				}
-				r = ref{Link: Link{Text: text}, label: label}
+				r = ref{Text: text, label: label}
 				j += k
 			default:
 				continue

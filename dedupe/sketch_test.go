@@ -81,7 +81,7 @@ func TestSignWidth(t *testing.T) {
 
 func TestSignIsRepeatable(t *testing.T) {
 	first := Sign("ada lovelace byron", 32)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		next := Sign("ada  LOVELACE   byron", 32)
 		for j := range first {
 			if first[j] != next[j] {

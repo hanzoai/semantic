@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -189,11 +190,8 @@ func (m *Memory) About(entity string) []Note {
 	defer m.mu.RUnlock()
 	var out []Note
 	for _, id := range m.order {
-		for _, e := range m.notes[id].Of {
-			if e == entity {
-				out = append(out, *m.notes[id])
-				break
-			}
+		if slices.Contains(m.notes[id].Of, entity) {
+			out = append(out, *m.notes[id])
 		}
 	}
 	return out

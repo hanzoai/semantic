@@ -246,7 +246,7 @@ var edges = map[string][]string{}
 // parseForm pulls the query or update out of a form-encoded body, which is how
 // the protocol carries it.
 func parseForm(body string) (string, error) {
-	for _, part := range strings.Split(body, "&") {
+	for part := range strings.SplitSeq(body, "&") {
 		name, value, ok := strings.Cut(part, "=")
 		if ok && (name == "query" || name == "update") {
 			return unescape(value)

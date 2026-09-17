@@ -51,7 +51,7 @@ func Space(s string) string {
 	b.Grow(len(s))
 	blank := 0
 	first := true
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(squeeze(line, ' '))
 		if line == "" {
 			blank++
@@ -190,7 +190,7 @@ func Repeats(pages []string, share float64) []string {
 	seen := map[string]int{}
 	for _, page := range pages {
 		once := map[string]bool{}
-		for _, line := range strings.Split(page, "\n") {
+		for line := range strings.SplitSeq(page, "\n") {
 			k := key(line)
 			if k == "" || once[k] {
 				continue
@@ -199,14 +199,11 @@ func Repeats(pages []string, share float64) []string {
 			seen[k]++
 		}
 	}
-	floor := int(share*float64(len(pages)) + 0.5)
-	if floor < 2 {
-		floor = 2
-	}
+	floor := max(int(share*float64(len(pages))+0.5), 2)
 	out := make([]string, len(pages))
 	for i, page := range pages {
 		var keep []string
-		for _, line := range strings.Split(page, "\n") {
+		for line := range strings.SplitSeq(page, "\n") {
 			if k := key(line); k != "" && seen[k] >= floor {
 				continue
 			}

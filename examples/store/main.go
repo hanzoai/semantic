@@ -310,7 +310,7 @@ var vocab = []string{"babbage", "engines", "engine", "analytical", "difference",
 func embed(text string) []float32 {
 	v := make([]float32, len(vocab))
 	low := strings.ToLower(text)
-	for _, w := range strings.Fields(low) {
+	for w := range strings.FieldsSeq(low) {
 		w = strings.Trim(w, ".,")
 		for i, t := range vocab {
 			if w == t {

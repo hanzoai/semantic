@@ -267,8 +267,8 @@ func name(cols []string, i int) string {
 // comma, semicolon, tab and pipe. Comma when nothing separates anything.
 func sniff(b []byte) rune {
 	line := b
-	if i := bytes.IndexByte(b, '\n'); i >= 0 {
-		line = b[:i]
+	if before, _, ok := bytes.Cut(b, []byte{'\n'}); ok {
+		line = before
 	}
 	best, top := ',', 0
 	for _, c := range []rune{',', ';', '\t', '|'} {

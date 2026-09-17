@@ -173,8 +173,8 @@ func TestTraceReadsTheDistance(t *testing.T) {
 	for _, id := range []string{"d1", "d2", "d3"} {
 		j.Write(ctx, loan(id, "step "+id, "approved", 0.9))
 	}
-	j.G.Join(Edge{Link: Link{From: "d1", To: "d2", Label: Caused}, Weight: 0.9})
-	j.G.Join(Edge{Link: Link{From: "d2", To: "d3", Label: Influenced}, Weight: 0.5})
+	j.G.Join(Edge{From: "d1", To: "d2", Label: Caused, Weight: 0.9})
+	j.G.Join(Edge{From: "d2", To: "d3", Label: Influenced, Weight: 0.5})
 	c := &Cause{G: j.G}
 
 	tr := c.Trace("d1", "d3")

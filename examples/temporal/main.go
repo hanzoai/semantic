@@ -50,11 +50,11 @@ func build(g *agent.Graph) {
 
 	// The company was in London from 1843 and moved to Montréal in 1852.
 	// Both edges are true, at different times.
-	g.Join(agent.Edge{Link: agent.Link{From: "babbage engines", To: "london", Label: "located_in"},
+	g.Join(agent.Edge{From: "babbage engines", To: "london", Label: "located_in",
 		Weight: 0.9, Span: agent.Span{From: y1843, Until: y1852}})
-	g.Join(agent.Edge{Link: agent.Link{From: "babbage engines", To: "montréal", Label: "located_in"},
+	g.Join(agent.Edge{From: "babbage engines", To: "montréal", Label: "located_in",
 		Weight: 0.9, Span: agent.Span{From: y1852}})
-	g.Join(agent.Edge{Link: agent.Link{From: "ada lovelace", To: "babbage engines", Label: "works_for"},
+	g.Join(agent.Edge{From: "ada lovelace", To: "babbage engines", Label: "works_for",
 		Weight: 0.8, Span: agent.Span{From: y1843, Until: y1855}})
 
 	s := g.Stats()
@@ -107,7 +107,7 @@ func lose(g *agent.Graph) {
 	// went stays, which is what erasure actually needs — proof that something
 	// was removed, without the thing itself.
 	g.Add(agent.Node{ID: "supplier contact", Kind: "person", Text: "a named individual"})
-	g.Join(agent.Edge{Link: agent.Link{From: "supplier contact", To: "babbage engines", Label: "supplies"}})
+	g.Join(agent.Edge{From: "supplier contact", To: "babbage engines", Label: "supplies"})
 	g.Purge("supplier contact", "erasure requested", now)
 	_, ok := g.Node("supplier contact")
 	fmt.Printf("  after purging: the node is readable at all? %v\n", ok)
@@ -153,7 +153,7 @@ func walk(g *agent.Graph) {
 	// another: a door joins two graphs without merging them.
 	other := &agent.Graph{}
 	other.Add(agent.Node{ID: "thames", Kind: "place", Text: "the Thames"})
-	other.Join(agent.Edge{Link: agent.Link{From: "thames", To: "wharf", Label: "runs_past"}})
+	other.Join(agent.Edge{From: "thames", To: "wharf", Label: "runs_past"})
 	g.Door("london", other, "thames")
 	crossed := g.Cross("babbage engines", other, "wharf", agent.Reach{Hops: 6, At: y1849})
 	fmt.Printf("  across a door into another graph: found=%v, %d hops, crossing %d boundary\n",

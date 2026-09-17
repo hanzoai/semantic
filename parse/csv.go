@@ -147,14 +147,14 @@ func wide(recs [][]string) int {
 // same number of times, at least once, on each of the first two lines. It
 // returns zero when none does, which is what prose looks like.
 func sep(s string) rune {
-	nl := strings.IndexByte(s, '\n')
-	if nl < 0 {
+	before, after, ok := strings.Cut(s, "\n")
+	if !ok {
 		return 0
 	}
-	one, rest := s[:nl], s[nl+1:]
+	one, rest := before, after
 	two := rest
-	if k := strings.IndexByte(rest, '\n'); k >= 0 {
-		two = rest[:k]
+	if before, _, ok := strings.Cut(rest, "\n"); ok {
+		two = before
 	}
 	if strings.TrimSpace(two) == "" {
 		return 0

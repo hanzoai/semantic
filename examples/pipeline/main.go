@@ -134,7 +134,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("export    turtle")
-	for _, line := range strings.Split(strings.TrimRight(doc.String(), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(doc.String(), "\n"), "\n") {
 		fmt.Printf("          %s\n", line)
 	}
 }

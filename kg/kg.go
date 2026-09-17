@@ -11,6 +11,8 @@ package kg
 import (
 	"fmt"
 	"hash/fnv"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/semantic"
@@ -403,9 +405,7 @@ func (n *Node) copy() Node {
 	c.Docs, c.Alias = clone(n.Docs), clone(n.Alias)
 	if n.Props != nil {
 		c.Props = make(map[string]any, len(n.Props))
-		for k, v := range n.Props {
-			c.Props[k] = v
-		}
+		maps.Copy(c.Props, n.Props)
 	}
 	return c
 }
@@ -422,10 +422,8 @@ func keep(list []string, v string) []string {
 	if v == "" {
 		return list
 	}
-	for _, x := range list {
-		if x == v {
-			return list
-		}
+	if slices.Contains(list, v) {
+		return list
 	}
 	return append(list, v)
 }

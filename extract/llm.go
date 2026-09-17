@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -371,13 +372,13 @@ func JSON(reply string) ([]byte, error) {
 
 	if i := strings.Index(text, "```json"); i >= 0 {
 		rest := text[i+len("```json"):]
-		if j := strings.Index(rest, "```"); j >= 0 {
-			text = strings.TrimSpace(rest[:j])
+		if before, _, ok := strings.Cut(rest, "```"); ok {
+			text = strings.TrimSpace(before)
 		} else {
 			text = strings.TrimSpace(rest)
 		}
 	} else if strings.Contains(text, "```") {
-		for _, block := range strings.Split(text, "```") {
+		for block := range strings.SplitSeq(text, "```") {
 			block = strings.TrimSpace(block)
 			if (strings.HasPrefix(block, "{") && strings.HasSuffix(block, "}")) ||
 				(strings.HasPrefix(block, "[") && strings.HasSuffix(block, "]")) {
@@ -455,8 +456,8 @@ func shut(s string) string {
 
 	var b strings.Builder
 	b.WriteString(s)
-	for i := len(open) - 1; i >= 0; i-- {
-		if open[i] == '{' {
+	for _, o := range slices.Backward(open) {
+		if o == '{' {
 			b.WriteByte('}')
 		} else {
 			b.WriteByte(']')

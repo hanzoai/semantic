@@ -59,16 +59,14 @@ func Read(t Turn, at int, speaker, other string, names map[string]bool) []Claim 
 		verb, rest := predicate(ws[from:])
 		for _, phrase := range phrases(rest) {
 			out = append(out, Claim{
-				Link: extract.Link{
-					Subject:   subject,
-					Predicate: verb,
-					Object:    phrase,
-					Score:     told,
-					From:      Day(t.Date),
-					Cite:      t.ID,
-				},
-				Turn: at,
-				Said: s,
+				Subject:   subject,
+				Predicate: verb,
+				Object:    phrase,
+				Score:     told,
+				From:      Day(t.Date),
+				Cite:      t.ID,
+				Turn:      at,
+				Said:      s,
 			})
 		}
 		for _, n := range naming(ws) {
@@ -270,7 +268,7 @@ func sentences(text string) []string {
 // "selfcare".
 func words(s string) []string {
 	var out []string
-	for _, w := range strings.Fields(normalise(s)) {
+	for w := range strings.FieldsSeq(normalise(s)) {
 		if spelled(w) {
 			out = append(out, w)
 		}
@@ -343,7 +341,7 @@ var (
 // list in this file is written.
 func set(words string) map[string]bool {
 	out := map[string]bool{}
-	for _, w := range strings.Fields(words) {
+	for w := range strings.FieldsSeq(words) {
 		out[w] = true
 	}
 	return out

@@ -274,11 +274,9 @@ func (b Bench) Run(ctx context.Context, o Options) (map[string]*Tally, map[strin
 	fail := make([]error, len(b))
 	var wg sync.WaitGroup
 	for i, c := range b {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			done[i], fail[i] = c.ask(ctx, o)
-		}()
+		})
 	}
 	wg.Wait()
 

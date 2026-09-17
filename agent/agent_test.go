@@ -126,8 +126,8 @@ func TestDecideFillsTheAgentFromScope(t *testing.T) {
 	ctx := context.Background()
 	k := New()
 	k.Scope = Scope{Agent: "ada"}
-	d := Decision{Topic: "loan", Case: "something", Confidence: 0.5}
-	d.Choice = "held"
+	d := Decision{Topic: "loan", Case: "something", Confidence: 0.5,
+		Choice: "held"}
 	out, err := k.Decide(ctx, d)
 	if err != nil {
 		t.Fatal(err)

@@ -1,6 +1,7 @@
 package normalize
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,12 +190,8 @@ func build() {
 	// A compatibility decomposition may name characters that decompose
 	// further, canonically or compatibly, so expand over both tables.
 	both := make(map[rune][]rune, len(step)+len(kompat))
-	for r, d := range step {
-		both[r] = d
-	}
-	for r, d := range kompat {
-		both[r] = d
-	}
+	maps.Copy(both, step)
+	maps.Copy(both, kompat)
 	canon = make(map[rune][]rune, len(step))
 	for r := range step {
 		canon[r] = expand(step, []rune{r})
@@ -215,7 +212,7 @@ func build() {
 	}
 
 	blocked := map[rune]bool{}
-	for _, f := range strings.Fields(blockData) {
+	for f := range strings.FieldsSeq(blockData) {
 		blocked[code(f)] = true
 	}
 	pairs = make(map[[2]rune]rune, len(step))
@@ -258,7 +255,7 @@ func parse(data string) map[rune][]rune {
 
 func lines(data string) []string {
 	var out []string
-	for _, l := range strings.Split(data, "\n") {
+	for l := range strings.SplitSeq(data, "\n") {
 		if l != "" {
 			out = append(out, l)
 		}

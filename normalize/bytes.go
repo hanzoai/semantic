@@ -162,7 +162,7 @@ var cp1252 = [32]rune{
 // UTF-8, and only keeps the result if it decodes cleanly — text that was never
 // damaged comes back untouched.
 func Repair(s string) string {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		fixed, ok := unmangle(s)
 		if !ok {
 			return s

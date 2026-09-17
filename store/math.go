@@ -40,7 +40,7 @@ func (m Metric) Score(a, b []float32) float64 {
 func Dot(a, b []float32) float64 {
 	n := min(len(a), len(b))
 	var s float64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s += float64(a[i]) * float64(b[i])
 	}
 	return s
@@ -84,7 +84,7 @@ func Cos(a, b []float32) float64 {
 func Dist(a, b []float32) float64 {
 	n := min(len(a), len(b))
 	var s float64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		d := float64(a[i]) - float64(b[i])
 		s += d * d
 	}

@@ -67,7 +67,7 @@ func (k *Ken) Learn(ctx context.Context, n Note) (string, error) {
 		if _, ok := k.Graph.Node(e); !ok {
 			k.Graph.Add(Node{ID: e, Kind: kindEntity, Text: e, Scope: note.Scope})
 		}
-		k.Graph.Join(Edge{Link: Link{From: id, To: e, Label: About}})
+		k.Graph.Join(Edge{From: id, To: e, Label: About})
 	}
 	return id, nil
 }

@@ -17,7 +17,7 @@ func Hash(s string) uint64 {
 	var count [64]int
 	for w := range words(fold(s)) {
 		h := digest(w)
-		for i := 0; i < 64; i++ {
+		for i := range 64 {
 			if h&(1<<uint(i)) != 0 {
 				count[i]++
 			} else {

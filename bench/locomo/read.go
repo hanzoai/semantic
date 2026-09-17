@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -245,12 +246,7 @@ func number(said []string, i int) int {
 }
 
 func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 var months = map[string]time.Month{

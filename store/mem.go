@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -264,9 +266,7 @@ func (m *Mem) Node(ctx context.Context, id string, props map[string]any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.node(id)
-	for k, v := range props {
-		m.prop[id][k] = v
-	}
+	maps.Copy(m.prop[id], props)
 	return nil
 }
 
@@ -663,10 +663,8 @@ func fits(f [3]string, s, p, o string) bool {
 // with appends v unless it is already there, keeping adjacency a set with an
 // order.
 func with(list []string, v string) []string {
-	for _, x := range list {
-		if x == v {
-			return list
-		}
+	if slices.Contains(list, v) {
+		return list
 	}
 	return append(list, v)
 }
@@ -696,8 +694,6 @@ func dup(m map[string]any) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	return out
 }

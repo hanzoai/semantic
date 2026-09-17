@@ -20,11 +20,11 @@ func TestManyAtOnce(t *testing.T) {
 	const writers = 8
 	const each = 25
 	var wg sync.WaitGroup
-	for w := 0; w < writers; w++ {
+	for w := range writers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < each; i++ {
+			for i := range each {
 				who := fmt.Sprintf("%d-%d", w, i)
 				if _, err := k.Learn(ctx, Note{Text: "application from " + who, Of: []string{"applicant " + who}}); err != nil {
 					t.Error(err)

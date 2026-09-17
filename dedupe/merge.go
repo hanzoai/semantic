@@ -168,13 +168,9 @@ func settle(have, v any, k Keep) any {
 func clone(e Entity) Entity {
 	out := e
 	out.Props = make(map[string]any, len(e.Props))
-	for k, v := range e.Props {
-		out.Props[k] = v
-	}
+	maps.Copy(out.Props, e.Props)
 	out.Meta = make(map[string]any, len(e.Meta)+2)
-	for k, v := range e.Meta {
-		out.Meta[k] = v
-	}
+	maps.Copy(out.Meta, e.Meta)
 	out.Edges = slices.Clone(e.Edges)
 	out.Vector = slices.Clone(e.Vector)
 	return out

@@ -182,10 +182,7 @@ func overlap(a, b []string) float64 {
 			n++
 		}
 	}
-	most := len(a)
-	if len(b) > most {
-		most = len(b)
-	}
+	most := max(len(b), len(a))
 	return float64(n) / float64(most)
 }
 

@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"html"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/semantic"
@@ -243,9 +244,9 @@ func (p *page) push(g *grab) { p.grabs = append(p.grabs, g) }
 // pop closes the innermost capture for name. Unclosed captures above it are
 // dropped, which is what a missing end tag means.
 func (p *page) pop(name string) *grab {
-	for i := len(p.grabs) - 1; i >= 0; i-- {
-		if p.grabs[i].tag == name {
-			g := p.grabs[i]
+	for i, g := range slices.Backward(p.grabs) {
+		if g.tag == name {
+
 			p.grabs = p.grabs[:i]
 			return g
 		}

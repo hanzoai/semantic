@@ -16,7 +16,7 @@ import (
 func words(s string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, w := range strings.Fields(strings.ToLower(s)) {
+	for w := range strings.FieldsSeq(strings.ToLower(s)) {
 		if !seen[w] {
 			seen[w] = true
 			out = append(out, w)

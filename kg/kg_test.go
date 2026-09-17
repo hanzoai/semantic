@@ -813,7 +813,7 @@ func TestStatShape(t *testing.T) {
 	}
 	// A long thin chain: few of the possible links are present.
 	chain := Build(nil)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		chain.Add(tri(string(rune('a'+i)), "r", string(rune('b'+i)), 0, ""))
 	}
 	if got := chain.Stat().Shape; got != "sparse" {
@@ -956,17 +956,17 @@ func TestMemIsSafeForConcurrentUse(t *testing.T) {
 	ctx := context.Background()
 	var m Mem
 	done := make(chan struct{})
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		go func(i int) {
 			defer func() { done <- struct{}{} }()
-			for j := 0; j < 50; j++ {
+			for j := range 50 {
 				m.Assert(ctx, "A", "r", string(rune('a'+j%26)))
 				m.Out(ctx, "A")
 				m.Match(ctx, "a", "", "")
 			}
 		}(i)
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		<-done
 	}
 	// Twenty-six objects, and the subject "A" folds onto the first of them,

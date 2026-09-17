@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/semantic/decision"
@@ -101,9 +103,7 @@ func (j *Journal) Write(ctx context.Context, d Decision) (Decision, error) {
 		d.At = time.Now().UTC()
 	}
 	props := map[string]any{}
-	for k, v := range d.Props {
-		props[k] = v
-	}
+	maps.Copy(props, d.Props)
 	props[keyTopic] = d.Topic
 	props[keyCase] = d.Case
 	props[keyReason] = d.Reason
@@ -124,7 +124,7 @@ func (j *Journal) Write(ctx context.Context, d Decision) (Decision, error) {
 		if _, ok := g.Node(e); !ok {
 			g.Add(Node{ID: e, Kind: kindEntity, Text: e})
 		}
-		g.Join(Edge{Link: Link{From: d.ID, To: e, Label: About}})
+		g.Join(Edge{From: d.ID, To: e, Label: About})
 	}
 	return j.read(d.ID)
 }
@@ -171,13 +171,11 @@ func (j *Journal) read(id string) (Decision, error) {
 // decide reads a decision out of the node it was written to.
 func (j *Journal) decide(n Node) Decision {
 	d := Decision{
-		Record: decision.Record{
-			ID:     n.ID,
-			Agent:  str(n.Props[keyAgent]),
-			Choice: str(n.Props[keyChoice]),
-			Rule:   str(n.Props[keyRule]),
-			At:     stamp(n.Props[keyAt]),
-		},
+		ID:         n.ID,
+		Agent:      str(n.Props[keyAgent]),
+		Choice:     str(n.Props[keyChoice]),
+		Rule:       str(n.Props[keyRule]),
+		At:         stamp(n.Props[keyAt]),
 		Topic:      str(n.Props[keyTopic]),
 		Case:       str(n.Props[keyCase]),
 		Reason:     str(n.Props[keyReason]),
@@ -264,7 +262,7 @@ func (j *Journal) Lead(from, to, how string) error {
 			return fmt.Errorf("agent: %s is a %s, not a decision", id, n.Kind)
 		}
 	}
-	g.Join(Edge{Link: Link{From: from, To: to, Label: how}})
+	g.Join(Edge{From: from, To: to, Label: how})
 	return nil
 }
 
@@ -360,11 +358,12 @@ func (j *Journal) Like(a Ask) []Match {
 
 // said is everything about a decision that a case can be compared against.
 func said(d Decision) string {
-	s := d.Case + " " + d.Reason
+	var s strings.Builder
+	s.WriteString(d.Case + " " + d.Reason)
 	for _, e := range d.Because {
-		s += " " + e
+		s.WriteString(" " + e)
 	}
-	return s
+	return s.String()
 }
 
 // live answers the temporal half of a search. Naming a moment asks what held

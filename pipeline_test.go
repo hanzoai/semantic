@@ -136,7 +136,7 @@ func TestPipeline(t *testing.T) {
 		t.Fatalf("split: %v", err)
 	}
 	if len(chunks) != 3 {
-		t.Fatalf("%d chunks, want 3: %q", len(chunks), chunks)
+		t.Fatalf("%d chunks, want 3: %+v", len(chunks), chunks)
 	}
 	var joined strings.Builder
 	for i, c := range chunks {

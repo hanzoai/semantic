@@ -102,8 +102,8 @@ func TestJSONKeepsMarkup(t *testing.T) {
 
 func TestJSONLD(t *testing.T) {
 	var doc struct {
-		Context map[string]string        `json:"@context"`
-		Graph   []map[string]interface{} `json:"@graph"`
+		Context map[string]string `json:"@context"`
+		Graph   []map[string]any  `json:"@graph"`
 	}
 	out := write(t, "jsonld")
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
@@ -124,7 +124,7 @@ func TestJSONLD(t *testing.T) {
 		if node["@id"] != want.id {
 			t.Errorf("node %d @id = %v, want %s", i, node["@id"], want.id)
 		}
-		obj, ok := node[want.pred].(map[string]interface{})
+		obj, ok := node[want.pred].(map[string]any)
 		if !ok {
 			t.Fatalf("node %d has no %s: %v", i, want.pred, node)
 		}

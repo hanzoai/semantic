@@ -36,8 +36,8 @@ func TestNearTracksDecayAndBand(t *testing.T) {
 	g.Add(Node{ID: "A", Kind: "entity", Text: "anchor"})
 	g.Add(Node{ID: "B", Kind: "entity", Text: "bridge"})
 	g.Add(Node{ID: "C", Kind: "decision", Text: "decision"})
-	g.Join(Edge{Link: Link{From: "A", To: "B", Label: Influenced}, Weight: 0.9})
-	g.Join(Edge{Link: Link{From: "B", To: "C", Label: Influenced}, Weight: 0.7})
+	g.Join(Edge{From: "A", To: "B", Label: Influenced, Weight: 0.9})
+	g.Join(Edge{From: "B", To: "C", Label: Influenced, Weight: 0.7})
 
 	steps := g.Near("A", Reach{Hops: 2, Floor: 0.5})
 	if len(steps) != 2 {
@@ -64,8 +64,8 @@ func TestNearTracksDecayAndBand(t *testing.T) {
 
 func TestNearFloorAndDepth(t *testing.T) {
 	var g Graph
-	g.Join(Edge{Link: Link{From: "A", To: "B", Label: "x"}, Weight: 0.5})
-	g.Join(Edge{Link: Link{From: "B", To: "C", Label: "x"}, Weight: 0.5})
+	g.Join(Edge{From: "A", To: "B", Label: "x", Weight: 0.5})
+	g.Join(Edge{From: "B", To: "C", Label: "x", Weight: 0.5})
 
 	if got := g.Near("A", Reach{}); len(got) != 1 || got[0].Node.ID != "B" {
 		t.Errorf("the zero Reach walked to %v, want one hop", steps(got))
@@ -83,9 +83,9 @@ func TestNearFloorAndDepth(t *testing.T) {
 
 func TestNearFollowsOnlyWhatItIsAsked(t *testing.T) {
 	var g Graph
-	g.Join(Edge{Link: Link{From: "A", To: "B", Label: Caused}, Weight: 1})
-	g.Join(Edge{Link: Link{From: "A", To: "C", Label: About}, Weight: 1})
-	g.Join(Edge{Link: Link{From: "A", To: "D", Label: Caused}, Weight: 0.2})
+	g.Join(Edge{From: "A", To: "B", Label: Caused, Weight: 1})
+	g.Join(Edge{From: "A", To: "C", Label: About, Weight: 1})
+	g.Join(Edge{From: "A", To: "D", Label: Caused, Weight: 0.2})
 
 	got := g.Near("A", Reach{Labels: []string{Caused}})
 	if !reflect.DeepEqual(steps(got), []string{"B", "D"}) {
@@ -102,8 +102,8 @@ func TestNearRespectsTime(t *testing.T) {
 	g.Add(Node{ID: "A"})
 	g.Add(Node{ID: "B"})
 	g.Add(Node{ID: "C", Span: Span{From: at(9)}})
-	g.Join(Edge{Link: Link{From: "A", To: "B", Label: "x"}, Span: Span{Until: at(2)}})
-	g.Join(Edge{Link: Link{From: "A", To: "C", Label: "x"}})
+	g.Join(Edge{From: "A", To: "B", Label: "x", Span: Span{Until: at(2)}})
+	g.Join(Edge{From: "A", To: "C", Label: "x"})
 
 	if got := g.Near("A", Reach{At: at(1)}); !reflect.DeepEqual(steps(got), []string{"B"}) {
 		t.Errorf("at day 1 the walk reached %v, want B: C is not true yet", steps(got))
@@ -115,8 +115,8 @@ func TestNearRespectsTime(t *testing.T) {
 
 func TestPath(t *testing.T) {
 	var g Graph
-	g.Join(Edge{Link: Link{From: "A", To: "B", Label: "x"}, Weight: 0.5})
-	g.Join(Edge{Link: Link{From: "B", To: "C", Label: "x"}, Weight: 0.5})
+	g.Join(Edge{From: "A", To: "B", Label: "x", Weight: 0.5})
+	g.Join(Edge{From: "B", To: "C", Label: "x", Weight: 0.5})
 
 	r := g.Path("A", "C", Reach{})
 	if !r.Found {

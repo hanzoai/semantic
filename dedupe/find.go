@@ -3,6 +3,7 @@ package dedupe
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 )
@@ -131,7 +132,7 @@ func candidates(es []Entity) [][2]int {
 	seen := map[[2]int]bool{}
 	var out [][2]int
 	for _, idx := range index {
-		for i := 0; i < len(idx); i++ {
+		for i := range idx {
 			for j := i + 1; j < len(idx); j++ {
 				c := [2]int{min(idx[i], idx[j]), max(idx[i], idx[j])}
 				if seen[c] {
@@ -270,9 +271,7 @@ func Groups(ps []Pair) []Group {
 			at[x] = gy
 		case gx != gy:
 			gx.Of = append(gx.Of, gy.Of...)
-			for kk, v := range gy.Like {
-				gx.Like[kk] = v
-			}
+			maps.Copy(gx.Like, gy.Like)
 			gx.Like[k] = p.Like
 			for _, e := range gy.Of {
 				at[e.key()] = gx

@@ -159,10 +159,7 @@ func plain(a, b string) float64 {
 	if len(x) == 0 || len(y) == 0 {
 		return 0
 	}
-	window := max(len(x), len(y))/2 - 1
-	if window < 0 {
-		window = 0
-	}
+	window := max(max(len(x), len(y))/2-1, 0)
 	hitX := make([]bool, len(x))
 	hitY := make([]bool, len(y))
 	hits := 0

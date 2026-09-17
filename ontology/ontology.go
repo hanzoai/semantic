@@ -7,6 +7,7 @@ package ontology
 
 import (
 	"errors"
+	"maps"
 	"sort"
 	"strings"
 )
@@ -75,7 +76,9 @@ type Property struct {
 // Count returns a pointer to n, for setting Min and Max inline. A nil Min or
 // Max leaves that end of the count open, which is not the same as a count of
 // zero.
-func Count(n int) *int { return &n }
+//
+//go:fix inline
+func Count(n int) *int { return new(n) }
 
 // Schema is a whole ontology: the terms and the namespace they live in.
 type Schema struct {
@@ -280,12 +283,8 @@ func (n Namespace) Resolve(prefix string) (string, bool) {
 // All returns every prefix in scope, standard and bound.
 func (n Namespace) All() map[string]string {
 	out := make(map[string]string, len(Standard)+len(n.Bound))
-	for p, iri := range Standard {
-		out[p] = iri
-	}
-	for p, iri := range n.Bound {
-		out[p] = iri
-	}
+	maps.Copy(out, Standard)
+	maps.Copy(out, n.Bound)
 	return out
 }
 

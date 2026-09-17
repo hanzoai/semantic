@@ -185,7 +185,7 @@ func header(s string) bool {
 		return false
 	}
 	seen := false
-	for _, line := range strings.Split(head, "\n") {
+	for line := range strings.SplitSeq(head, "\n") {
 		if line == "" {
 			return false
 		}

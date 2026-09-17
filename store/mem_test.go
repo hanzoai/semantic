@@ -694,11 +694,9 @@ func TestMemIsSafeForConcurrentUse(t *testing.T) {
 	ctx := t.Context()
 	var wg sync.WaitGroup
 	for i := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			id := string(rune('a' + i))
-			for j := 0; j < 50; j++ {
+			for j := range 50 {
 				m.Put(ctx, id, []float32{float32(i), float32(j)}, map[string]any{"n": j})
 				m.Edge(ctx, id, "hub", "knows")
 				m.Assert(ctx, id, "knows", "hub")
@@ -706,7 +704,7 @@ func TestMemIsSafeForConcurrentUse(t *testing.T) {
 				m.Match(ctx, "", "knows", "")
 				m.Stat()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if got := m.Stat(); got.Vectors != 8 || got.Facts != 8 {

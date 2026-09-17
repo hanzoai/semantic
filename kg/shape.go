@@ -2,6 +2,7 @@ package kg
 
 import (
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -298,8 +299,8 @@ func (g *Graph) Between() map[string]float64 {
 			}
 		}
 		owed := map[string]float64{}
-		for i := len(order) - 1; i >= 0; i-- {
-			at := order[i]
+		for _, at := range slices.Backward(order) {
+
 			for _, up := range prev[at] {
 				owed[up] += paths[up] / paths[at] * (1 + owed[at])
 			}
@@ -335,7 +336,7 @@ func (g *Graph) Eigen() map[string]float64 {
 	for _, id := range g.ord {
 		x[id] = start
 	}
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		next := make(map[string]float64, n)
 		var norm float64
 		for _, id := range g.ord {
@@ -402,7 +403,7 @@ func (g *Graph) Rank() map[string]float64 {
 	for _, k := range g.eord {
 		outs[k.from] = keep(outs[k.from], k.to)
 	}
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		next := make(map[string]float64, n)
 		var loose float64
 		for _, id := range g.ord {
@@ -450,7 +451,7 @@ func (g *Graph) Groups() [][]string {
 			weight[id] = float64(len(adj[id]))
 		}
 		two := 2 * float64(m)
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			moved := false
 			for _, id := range g.ord {
 				deg := float64(len(adj[id]))

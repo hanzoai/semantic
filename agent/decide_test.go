@@ -33,11 +33,11 @@ func TestWriteWantsTheEssentials(t *testing.T) {
 		name string
 		in   Decision
 	}{
-		{"no topic", Decision{Case: "c", Record: decision.Record{Choice: "approved"}}},
-		{"no case", Decision{Topic: "loan", Record: decision.Record{Choice: "approved"}}},
+		{"no topic", Decision{Case: "c", Choice: "approved"}},
+		{"no case", Decision{Topic: "loan", Choice: "approved"}},
 		{"no choice", Decision{Topic: "loan", Case: "c"}},
-		{"confidence above one", Decision{Topic: "loan", Case: "c", Confidence: 1.5, Record: decision.Record{Choice: "approved"}}},
-		{"confidence below zero", Decision{Topic: "loan", Case: "c", Confidence: -0.1, Record: decision.Record{Choice: "approved"}}},
+		{"confidence above one", Decision{Topic: "loan", Case: "c", Confidence: 1.5, Choice: "approved"}},
+		{"confidence below zero", Decision{Topic: "loan", Case: "c", Confidence: -0.1, Choice: "approved"}},
 	} {
 		if _, err := (&Journal{}).Write(ctx, c.in); err == nil {
 			t.Errorf("%s: Write accepted it", c.name)
@@ -99,8 +99,8 @@ func TestWriteFillsAnIDAndTime(t *testing.T) {
 	if second.ID == first.ID {
 		t.Error("two decisions were given the same id")
 	}
-	bare := Decision{Topic: "loan", Case: "c"}
-	bare.Choice = "approved"
+	bare := Decision{Topic: "loan", Case: "c",
+		Choice: "approved"}
 	out, _ := j.Write(context.Background(), bare)
 	if out.At.IsZero() {
 		t.Error("a decision was written with no time")

@@ -66,7 +66,7 @@ func TestFindTheAppleRecords(t *testing.T) {
 func TestFindIsRepeatable(t *testing.T) {
 	es := append(firms(), Entity{ID: "e4", Name: "Apple Computer", Kind: "Company"})
 	var last []Pair
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		ps, err := Find(context.Background(), es, loose)
 		if err != nil {
 			t.Fatal(err)

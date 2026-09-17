@@ -246,7 +246,7 @@ func TestFileCompacts(t *testing.T) {
 	ctx := t.Context()
 	write(t, s)
 	// Churn: the log holds far more than the state it describes.
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		if err := s.Put(ctx, "churn", []float32{float32(i), 0}, nil); err != nil {
 			t.Fatal(err)
 		}

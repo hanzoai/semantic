@@ -308,7 +308,7 @@ func chunkID(hash string, index int) string {
 // character no term contains, which is right for a key and wrong for a line of
 // output.
 func show(id string) string {
-	if i := strings.IndexByte(id, 0x1f); i >= 0 {
+	if found := strings.Contains(id, "\x1f"); found {
 		parts := strings.Split(id, "\x1f")
 		return fmt.Sprintf("%s %s %s", parts[0], parts[1], parts[2])
 	}

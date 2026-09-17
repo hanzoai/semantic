@@ -57,10 +57,7 @@ func (g Gap) Relations(text string, known []Entity) []Relation {
 			if hi.Start < lo.Start {
 				lo, hi = hi, lo
 			}
-			apart := hi.Start - lo.End
-			if apart < 0 {
-				apart = 0
-			}
+			apart := max(hi.Start-lo.End, 0)
 			if apart > reach {
 				continue
 			}

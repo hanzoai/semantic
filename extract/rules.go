@@ -259,14 +259,8 @@ func alternation(known []Entity) string {
 
 // window is the text around a match, for evidence.
 func window(text string, start, end, pad int) string {
-	from := start - pad
-	if from < 0 {
-		from = 0
-	}
-	to := end + pad
-	if to > len(text) {
-		to = len(text)
-	}
+	from := max(start-pad, 0)
+	to := min(end+pad, len(text))
 	return text[from:to]
 }
 

@@ -3,6 +3,7 @@ package ontology
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -78,9 +79,7 @@ func ParseJSONLD(src []byte) (Schema, error) {
 		return Schema{}, fmt.Errorf("json-ld: %w", err)
 	}
 	ctx := map[string]string{}
-	for p, iri := range Standard {
-		ctx[p] = iri
-	}
+	maps.Copy(ctx, Standard)
 	vocab := ""
 	if c, ok := doc["@context"].(map[string]any); ok {
 		for k, v := range c {

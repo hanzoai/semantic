@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/semantic"
-	"github.com/hanzoai/semantic/extract"
 	"github.com/hanzoai/semantic/kg"
 	"github.com/hanzoai/semantic/reason"
 	"github.com/hanzoai/semantic/store"
@@ -139,15 +138,13 @@ func NewKnowledge(ctx context.Context, s Sample, turns []Turn, words *Words) (*K
 				continue
 			}
 			claims = append(claims, Claim{
-				Link: extract.Link{
-					Subject:   f.Subject,
-					Predicate: f.Predicate,
-					Object:    f.Object,
-					Score:     f.Score,
-					From:      Day(turns[i].Date),
-					Cite:      turns[i].ID,
-				},
-				Turn: i,
+				Subject:   f.Subject,
+				Predicate: f.Predicate,
+				Object:    f.Object,
+				Score:     f.Score,
+				From:      Day(turns[i].Date),
+				Cite:      turns[i].ID,
+				Turn:      i,
 			})
 		}
 		facts = append(facts, f.Triple)

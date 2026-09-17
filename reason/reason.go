@@ -14,6 +14,7 @@ package reason
 import (
 	"errors"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/semantic"
@@ -199,12 +200,7 @@ func clone(b Bind) Bind {
 }
 
 func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }

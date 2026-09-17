@@ -193,7 +193,7 @@ func camelCase(name string) bool {
 }
 
 func titleCase(name string) bool {
-	for _, w := range strings.Fields(name) {
+	for w := range strings.FieldsSeq(name) {
 		if !unicode.IsUpper([]rune(w)[0]) {
 			return false
 		}

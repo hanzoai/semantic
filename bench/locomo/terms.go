@@ -150,7 +150,7 @@ var asked = stemmed("what when where who whom which why how did does do is are "
 // stemmed is a lookup of the stems of a space-separated list.
 func stemmed(words string) map[string]bool {
 	out := map[string]bool{}
-	for _, w := range strings.Fields(words) {
+	for w := range strings.FieldsSeq(words) {
 		out[stem(w)] = true
 	}
 	return out

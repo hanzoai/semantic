@@ -124,7 +124,7 @@ func TestMemoBuysOnce(t *testing.T) {
 	hits := new(atomic.Int64)
 	memo := Memo{Model: chat, Dir: t.TempDir(), Name: "test-model", Hits: hits}
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		got, err := memo.Complete(context.Background(), "where?", nil)
 		if err != nil || got != "Paris" {
 			t.Fatalf("answered %q, %v", got, err)
@@ -149,7 +149,7 @@ func TestMemoBuysOnce(t *testing.T) {
 func TestMemoKeepsNoFailure(t *testing.T) {
 	chat := &stub{err: errors.New("busy"), n: new(atomic.Int64)}
 	memo := Memo{Model: chat, Dir: t.TempDir(), Name: "test-model", Hits: new(atomic.Int64)}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if _, err := memo.Complete(context.Background(), "where?", nil); err == nil {
 			t.Fatal("a failed call came back as an answer")
 		}

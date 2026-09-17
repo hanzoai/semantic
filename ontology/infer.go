@@ -3,6 +3,7 @@ package ontology
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -496,10 +497,8 @@ func wider(a, b string) string {
 }
 
 func add(list []string, v string) []string {
-	for _, s := range list {
-		if s == v {
-			return list
-		}
+	if slices.Contains(list, v) {
+		return list
 	}
 	return append(list, v)
 }

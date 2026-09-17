@@ -212,7 +212,7 @@ func count(dir string) int {
 
 // short trims the temporary directory off a path so the output is stable.
 func short(ref, dir string) string {
-	if s := strings.TrimPrefix(ref, dir); s != ref {
+	if s, ok := strings.CutPrefix(ref, dir); ok {
 		return "." + s
 	}
 	return ref

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"slices"
 	"sort"
 	"time"
 )
@@ -57,12 +58,7 @@ func (r Reach) follows(e *Edge) bool {
 	if len(r.Labels) == 0 {
 		return true
 	}
-	for _, l := range r.Labels {
-		if e.Label == l {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.Labels, e.Label)
 }
 
 // Step is one node a walk reached, and what the walk cost to get there.
