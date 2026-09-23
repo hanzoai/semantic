@@ -201,6 +201,13 @@ func clamp(f float64) float64 {
 
 // synonyms are the type and predicate names that mean the same thing, so a
 // label an extractor produced can be recognised as one a caller asked for.
+//
+// A predicate's synonym holds with the same subject and object, since a match
+// keeps them where they are. So a predicate with a direction lists no inverse
+// — employs is not works_for, managed_by is not ceo_of; reason.Inverse is the
+// rule that relates those — and no name that reads either way round, such as
+// a bare noun ("founder", "parent_company") or a symmetric relation
+// ("merged_with"). A symmetric predicate may list anything symmetric.
 var synonyms = map[string][]string{
 	"person":       {"people", "human", "name", "individual", "artist", "actor", "author", "politician"},
 	"org":          {"company", "organization", "business", "institution", "agency", "brand", "corporation"},
@@ -215,13 +222,13 @@ var synonyms = map[string][]string{
 	"chemical":     {"drug", "substance", "compound", "element"},
 	"disease":      {"condition", "illness", "sickness", "disorder", "syndrome", "ailment"},
 
-	"founded_by":      {"founder", "creator", "established_by", "started_by", "originator"},
-	"acquired":        {"bought", "purchased", "acquisition", "takeover", "ownership", "merged_with"},
-	"subsidiary_of":   {"owned_by", "parent_company", "part_of", "division_of", "unit_of"},
-	"works_for":       {"employee_of", "employed_by", "staff_of", "team_member", "employs", "hired_by"},
+	"founded_by":      {"established_by", "started_by"},
+	"acquired":        {"bought", "purchased"},
+	"subsidiary_of":   {"owned_by", "part_of", "division_of", "unit_of"},
+	"works_for":       {"employee_of", "employed_by", "staff_of", "hired_by"},
 	"located_in":      {"based_in", "headquartered_in", "situated_in", "found_in", "operates_in"},
-	"ceo_of":          {"leader_of", "head_of", "director_of", "president_of", "chief_executive", "managed_by"},
-	"invested_in":     {"funded", "financed", "backed", "shareholder_of", "venture_capital"},
+	"ceo_of":          {"leader_of", "head_of", "director_of", "president_of"},
+	"invested_in":     {"funded", "financed", "backed", "shareholder_of"},
 	"partner_with":    {"collaborate_with", "joint_venture", "alliance", "deal_with", "partnership"},
 	"competitor_of":   {"rival", "competes_with", "opponent", "nemesis"},
 	"manufacturer_of": {"producer_of", "maker_of", "creator_of", "builder_of"},

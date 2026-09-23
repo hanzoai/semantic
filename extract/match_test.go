@@ -55,6 +55,44 @@ func TestNear(t *testing.T) {
 	}
 }
 
+// TestNearDirection holds a predicate synonym to the direction of the
+// predicate. A synonym stands in for the name it is listed under with the
+// same subject and object, so Acme employs Alice is not a synonym of Alice
+// works_for Acme, and a name that reads either way — a merger, a bare
+// "founder" — is not one of a predicate that has a direction.
+func TestNearDirection(t *testing.T) {
+	for _, c := range []struct{ said, want string }{
+		{"employs", "works_for"},
+		{"managed_by", "ceo_of"},
+		{"parent_company", "subsidiary_of"},
+		{"chief_executive", "ceo_of"},
+		{"team_member", "works_for"},
+		{"merged_with", "acquired"},
+		{"ownership", "acquired"},
+		{"founder", "founded_by"},
+		{"creator", "founded_by"},
+		{"venture_capital", "invested_in"},
+	} {
+		for _, pair := range [][2]string{{c.said, c.want}, {c.want, c.said}} {
+			if _, s := Near(pair[0], []string{pair[1]}); s >= 0.8 {
+				t.Errorf("Near(%q, %q) = %v, want below 0.8: they do not read the same way round", pair[0], pair[1], s)
+			}
+		}
+	}
+	for _, c := range []struct{ said, want string }{
+		{"owned_by", "subsidiary_of"},
+		{"employed_by", "works_for"},
+		{"head_of", "ceo_of"},
+		{"bought", "acquired"},
+		{"established_by", "founded_by"},
+		{"rival", "competitor_of"},
+	} {
+		if _, s := Near(c.said, []string{c.want}); !about(s, 0.95) {
+			t.Errorf("Near(%q, %q) = %v, want 0.95", c.said, c.want, s)
+		}
+	}
+}
+
 func TestNearFallsBackToRatio(t *testing.T) {
 	// Below the containment threshold the longest-matching-blocks ratio
 	// decides, so a near-miss spelling still finds its candidate.
