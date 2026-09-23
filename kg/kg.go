@@ -106,28 +106,24 @@ func Build(ts []semantic.Triple, types ...string) *Graph {
 // Add asserts one triple and reports whether it said anything: a triple
 // missing a subject, predicate or object is dropped. Repeating an assertion
 // raises its count, keeps the highest confidence seen, and records the
-// further source; it never makes a second edge. A zero Score counts as 1,
-// because an extractor that states no confidence is not stating no
-// confidence.
+// further source; it never makes a second edge. A zero Score states no
+// confidence, and so raises none: a node or edge no assertion scored stays at
+// zero, unscored, below any that one did.
 func (g *Graph) Add(t semantic.Triple) bool {
 	s, o := Fold(t.Subject), Fold(t.Object)
 	if s == "" || o == "" || strings.TrimSpace(t.Predicate) == "" {
 		return false
 	}
-	score := t.Score
-	if score == 0 {
-		score = 1
-	}
 	doc := t.From.DocID
-	n := g.touch(s, t.Subject, score, doc)
+	n := g.touch(s, t.Subject, t.Score, doc)
 	if g.types[Fold(t.Predicate)] {
 		if n.Type == "" {
 			n.Type = strings.TrimSpace(t.Object)
 		}
 		return true
 	}
-	g.touch(o, t.Object, score, doc)
-	g.link(s, t.Predicate, o, score, doc)
+	g.touch(o, t.Object, t.Score, doc)
+	g.link(s, t.Predicate, o, t.Score, doc)
 	return true
 }
 

@@ -175,14 +175,24 @@ func TestRepeatedAssertionDoesNotDuplicate(t *testing.T) {
 	}
 }
 
-// An extractor that states no confidence is not stating no confidence.
-func TestAbsentScoreCountsAsCertain(t *testing.T) {
-	g := Build([]semantic.Triple{tri("A", "r", "B", 0, "")})
-	if e := g.Edges()[0]; e.Score != 1 {
-		t.Errorf("score = %v, want 1", e.Score)
+// A zero Score is an assertion that states no confidence. It leaves the best
+// stated confidence where it was, and an edge no assertion scored stays
+// unscored, below every edge one did.
+func TestAbsentScoreStaysUnscored(t *testing.T) {
+	g := Build([]semantic.Triple{
+		tri("Apple", "acquired", "Beats", 0.95, ""),
+		tri("Apple", "acquired", "Shazam", 0, ""),
+		tri("Apple", "makes", "iPhone", 0.6, ""),
+		tri("Apple", "makes", "iPhone", 0, ""),
+	})
+	want := map[string]float64{"beats": 0.95, "shazam": 0, "iphone": 0.6}
+	for _, e := range g.Edges() {
+		if e.Score != want[e.To] {
+			t.Errorf("%s -> %s score = %v, want %v", e.From, e.To, e.Score, want[e.To])
+		}
 	}
-	if n, _ := g.Node("A"); n.Score != 1 {
-		t.Errorf("node score = %v, want 1", n.Score)
+	if n, _ := g.Node("Shazam"); n.Score != 0 {
+		t.Errorf("node score = %v, want 0, unscored", n.Score)
 	}
 }
 

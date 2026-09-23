@@ -28,7 +28,8 @@ type Chunk struct {
 
 // Triple is one assertion an extractor found, with the span it came from.
 // The span is what makes the assertion answerable later: a claim without
-// its source is not evidence.
+// its source is not evidence. Score is the extractor's confidence in [0,1],
+// zero when it stated none.
 type Triple struct {
 	Subject   string
 	Predicate string
