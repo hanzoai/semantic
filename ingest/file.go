@@ -21,7 +21,8 @@ type File struct {
 	// no limit.
 	Max int64
 	// Decode turns the bytes into documents. Nil picks a decoder from the
-	// file's extension: json, jsonl, csv, tsv, html, otherwise plain text.
+	// file's extension: json, jsonl, csv, tsv, html, otherwise Raw, which
+	// decodes text and keeps a binary file's bytes.
 	Decode Decoder
 }
 

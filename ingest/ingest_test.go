@@ -1,6 +1,8 @@
 package ingest
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hanzoai/semantic"
 )
@@ -83,6 +86,81 @@ func TestText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBinary holds binary sources to their bytes. A zip or a PDF is not text
+// in some legacy encoding: reading one as Latin-1 rewrites every byte above
+// 0x7F as two, and the archive a format reader downstream opens is no longer
+// the one that was read. Only text is decoded.
+func TestBinary(t *testing.T) {
+	var zipped bytes.Buffer
+	zw := zip.NewWriter(&zipped)
+	w, err := zw.Create("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(bytes.Repeat([]byte("<w:t>binary stays bytes</w:t>"), 50)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	pdf := []byte("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Length 4 >>\nstream\n\x00\x9f\xff\x80\nendstream\n")
+	if utf8.Valid(zipped.Bytes()) || utf8.Valid(pdf) {
+		t.Fatal("the fixtures must not be valid UTF-8, or they test nothing")
+	}
+
+	root := t.TempDir()
+	for _, c := range []struct {
+		name string
+		body []byte
+	}{
+		{"memo.docx", zipped.Bytes()},
+		{"archive", zipped.Bytes()}, // no extension: the leading bytes say zip
+		{"paper.pdf", pdf},
+		{"scan.png", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\xff\xfe")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := filepath.Join(root, c.name)
+			write(t, p, c.body)
+			docs, err := File{}.Ingest(context.Background(), p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(docs) != 1 {
+				t.Fatalf("got %d docs, want 1", len(docs))
+			}
+			if docs[0].Text != string(c.body) {
+				t.Errorf("the bytes changed: %d in, %d out", len(c.body), len(docs[0].Text))
+			}
+			if o := OriginOf(docs[0]); o.Size != int64(len(c.body)) || o.Hash != sum(c.body) {
+				t.Errorf("origin = %+v, want the size and hash of the bytes read", o)
+			}
+		})
+	}
+
+	t.Run("reader", func(t *testing.T) {
+		docs, err := Reader{R: bytes.NewReader(zipped.Bytes()), Source: "upload"}.Ingest(context.Background(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if docs[0].Text != zipped.String() {
+			t.Error("a binary stream was decoded as text")
+		}
+	})
+
+	// The fallback for text is unchanged: a Latin-1 file is still text.
+	t.Run("latin-1 text", func(t *testing.T) {
+		p := filepath.Join(root, "menu.txt")
+		write(t, p, []byte("Caf\xe9 cr\xe8me"))
+		docs, err := File{}.Ingest(context.Background(), p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if docs[0].Text != "Café crème" {
+			t.Errorf("text = %q, want Café crème", docs[0].Text)
+		}
+	})
 }
 
 // TestKind ports the FileTypeDetector cases: extension first, leading bytes

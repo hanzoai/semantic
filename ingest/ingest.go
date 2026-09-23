@@ -271,6 +271,8 @@ func doc(o Origin, n int, body string) semantic.Doc {
 
 // text decodes b as UTF-8, falling back to Latin-1 when it is not valid
 // UTF-8, so a byte sequence never silently becomes replacement characters.
+// It is for sources that are text; a whole source that may be binary goes
+// through body.
 func text(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)

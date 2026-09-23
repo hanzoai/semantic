@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -48,12 +49,32 @@ func pick(typ string) Decoder {
 	return Raw{}
 }
 
-// Raw reads the bytes as one document of text.
+// Raw reads the bytes as one document. Text is decoded to UTF-8; a binary
+// source — an archive, a PDF, an image — is left as the bytes it was, so the
+// reader for its format downstream opens the file that was read.
 type Raw struct{}
 
 // Decode returns a single document holding the whole source.
 func (Raw) Decode(b []byte, o Origin) ([]semantic.Doc, error) {
-	return []semantic.Doc{doc(o, -1, text(b))}, nil
+	return []semantic.Doc{doc(o, -1, body(b))}, nil
+}
+
+// body is the text of a whole source: text decoded as text does, and binary
+// kept byte for byte. The Latin-1 fallback is right for legacy text and wrong
+// for everything else — it rewrites each byte above 0x7F as two, which turns
+// a zip into something no zip reader opens.
+func body(b []byte) string {
+	if binary(b) {
+		return string(b)
+	}
+	return text(b)
+}
+
+// binary reports whether b is not text, by the WHATWG sniffing algorithm the
+// standard library implements: a known binary signature, or a control byte
+// that text does not contain, within the first 512 bytes.
+func binary(b []byte) bool {
+	return !strings.HasPrefix(http.DetectContentType(b), "text/")
 }
 
 // JSON reads a JSON document: an array becomes one document per element,
