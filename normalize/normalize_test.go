@@ -44,6 +44,80 @@ func TestSpace(t *testing.T) {
 	}
 }
 
+// TestSpaceCode holds Space off code. Indentation is the meaning of code —
+// Python's blocks, a Makefile's tabs, the alignment in a table of numbers —
+// so a CommonMark fenced block, from its opening fence to its closing one,
+// and an indented block are left byte for byte, blank lines, trailing spaces
+// and all. The prose around them is still cleaned.
+func TestSpaceCode(t *testing.T) {
+	for _, c := range []struct{ name, in, want string }{
+		{
+			"fenced",
+			"Text  here \n\n\n```go\nfunc a() {\n\tif x  {\n\t\treturn  \n\t}\n\n\n}\n```\n\n\nafter   text  ",
+			"Text here\n\n```go\nfunc a() {\n\tif x  {\n\t\treturn  \n\t}\n\n\n}\n```\n\nafter text",
+		},
+		{
+			"tildes, and a shorter fence inside does not close",
+			"~~~~\n  a  b\n~~~\n  c\n~~~~\nd  e",
+			"~~~~\n  a  b\n~~~\n  c\n~~~~\nd e",
+		},
+		{
+			"a fence closes only on its own character",
+			"```\nx  y\n~~~\nz  w\n```\nv  w",
+			"```\nx  y\n~~~\nz  w\n```\nv w",
+		},
+		{
+			"an indented fence, up to three spaces",
+			"   ```\n  x  \n   ```\n  y  ",
+			"   ```\n  x  \n   ```\ny",
+		},
+		{
+			"an unclosed fence runs to the end",
+			"a  b\n```\n  x  \n\n\n  y\n",
+			"a b\n```\n  x  \n\n\n  y\n",
+		},
+		{
+			"indented code, with the blank lines inside it",
+			"Para  one\n\n    code  line\n\tmore\t code\n\n\n    after  blank\n\n\n\nnext   para",
+			"Para one\n\n    code  line\n\tmore\t code\n\n\n    after  blank\n\nnext para",
+		},
+		{
+			"indented code at the top",
+			"    x  =  1\n    y  =  2\nz  =  3",
+			"    x  =  1\n    y  =  2\nz = 3",
+		},
+		{
+			"indented code after a heading",
+			"# Title  \n    x  =  1",
+			"# Title\n    x  =  1",
+		},
+		{
+			"an indented line continuing a paragraph is prose",
+			"Para\n    continued   here",
+			"Para\ncontinued here",
+		},
+		{
+			"four spaces before a fence make code, not a fence",
+			"a\n\n    ```\n    x  y\n\nb  c",
+			"a\n\n    ```\n    x  y\n\nb c",
+		},
+		{
+			"a non-breaking space in code is the author's",
+			"```\na" + str(0x00A0) + "b\n```",
+			"```\na" + str(0x00A0) + "b\n```",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Space(c.in); got != c.want {
+				t.Errorf("Space(%q)\n got %q\nwant %q", c.in, got, c.want)
+			}
+			if got := Space(Space(c.in)); got != Space(c.in) {
+				t.Errorf("Space is not idempotent: %q then %q", Space(c.in), got)
+			}
+		})
+	}
+}
+
 func TestFlat(t *testing.T) {
 	if got, want := Flat("  a  b\n\nc\t d  "), "a b c d"; got != want {
 		t.Errorf("Flat = %q, want %q", got, want)

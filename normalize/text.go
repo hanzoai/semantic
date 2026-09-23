@@ -39,34 +39,141 @@ func Control(s string) string {
 // every kind of space becomes an ordinary one, runs collapse, trailing space
 // goes, and a run of blank lines becomes a single blank line. Paragraphs
 // survive, which is what a splitter wants.
+//
+// Code is left exactly as written, because in code the spacing is the
+// meaning: a CommonMark fenced block, from its opening fence through its
+// closing one (or to the end, when it never closes), and an indented block —
+// lines indented four columns or more that do not continue a paragraph — keep
+// their indentation, their inner spacing, their trailing space and their blank
+// lines.
 func Space(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if r == '\t' || unicode.Is(unicode.Zs, r) {
-			return ' '
-		}
-		return r
-	}, s)
-
-	var b strings.Builder
+	var (
+		b     strings.Builder
+		fence string   // the open fence, "" outside a fenced block
+		code  bool     // inside an indented block
+		para  bool     // the last line was prose, which an indented line continues
+		held  []string // blank lines not yet written
+		first = true
+	)
 	b.Grow(len(s))
-	blank := 0
-	first := true
-	for line := range strings.SplitSeq(s, "\n") {
-		line = strings.TrimSpace(squeeze(line, ' '))
-		if line == "" {
-			blank++
-			continue
-		}
+	write := func(line string) {
 		if !first {
 			b.WriteByte('\n')
-			if blank > 0 {
-				b.WriteByte('\n')
-			}
 		}
 		b.WriteString(line)
-		blank, first = 0, false
+		first = false
+	}
+	// settle writes the blank lines held before a line: all of them, as they
+	// were, between two lines of one indented block, and otherwise one.
+	settle := func(verbatim bool) {
+		switch {
+		case verbatim:
+			for _, h := range held {
+				write(h)
+			}
+		case len(held) > 0 && !first:
+			write("")
+		}
+		held = held[:0]
+	}
+
+	for line := range strings.SplitSeq(s, "\n") {
+		if fence != "" {
+			write(line)
+			if closes(line, fence) {
+				fence = ""
+			}
+			continue
+		}
+		if strings.TrimFunc(line, space) == "" {
+			held = append(held, line)
+			para = false
+			continue
+		}
+		width, rest := indent(line)
+		switch {
+		case width >= 4 && (code || !para):
+			settle(code)
+			write(line)
+			code = true
+			continue
+		case width < 4 && opens(rest) != "":
+			settle(false)
+			write(line)
+			fence, code, para = opens(rest), false, false
+			continue
+		}
+		settle(false)
+		code = false
+		write(strings.TrimSpace(squeeze(strings.Map(func(r rune) rune {
+			if r == '\t' || unicode.Is(unicode.Zs, r) {
+				return ' '
+			}
+			return r
+		}, line), ' ')))
+		para = width >= 4 || !atx(rest)
 	}
 	return b.String()
+}
+
+// space reports a rune that is only space: a tab or a space separator.
+func space(r rune) bool { return r == '\t' || unicode.Is(unicode.Zs, r) }
+
+// indent measures a line's indentation in columns, a tab advancing to the next
+// multiple of four as CommonMark counts it, and returns what follows it.
+func indent(line string) (int, string) {
+	width := 0
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case ' ':
+			width++
+		case '\t':
+			width += 4 - width%4
+		default:
+			return width, line[i:]
+		}
+	}
+	return width, ""
+}
+
+// opens returns the fence a line opens — three or more backticks or tildes —
+// or "" when it opens none. A backtick fence's info string cannot itself hold
+// a backtick, which is how CommonMark tells a fence from inline code.
+func opens(rest string) string {
+	for _, c := range []byte{'`', '~'} {
+		n := 0
+		for n < len(rest) && rest[n] == c {
+			n++
+		}
+		if n >= 3 && (c == '~' || !strings.ContainsRune(rest[n:], '`')) {
+			return rest[:n]
+		}
+	}
+	return ""
+}
+
+// closes reports whether a line closes the fence: indented under four columns,
+// the same character at least as many times, and nothing after but space.
+func closes(line, fence string) bool {
+	width, rest := indent(line)
+	if width >= 4 {
+		return false
+	}
+	n := 0
+	for n < len(rest) && rest[n] == fence[0] {
+		n++
+	}
+	return n >= len(fence) && strings.Trim(rest[n:], " \t") == ""
+}
+
+// atx reports whether a line is an ATX heading, which ends a paragraph: one to
+// six # and then a space, a tab, or nothing.
+func atx(rest string) bool {
+	n := 0
+	for n < len(rest) && rest[n] == '#' {
+		n++
+	}
+	return n >= 1 && n <= 6 && (n == len(rest) || rest[n] == ' ' || rest[n] == '\t')
 }
 
 // Flat collapses every run of whitespace, newlines included, to a single space.
