@@ -26,10 +26,20 @@ import (
 // and again on the socket the connection actually lands on, so a hostname
 // that resolves to a public address and then to 127.0.0.1 still fails. Set
 // Private to turn it off for a trusted internal deployment.
+//
+// The clients this package builds connect directly and never through a proxy
+// named in the environment: through a proxy, the socket the rules check is the
+// proxy's, and the target's address is never seen. A host that fetches through
+// its own egress supplies Client.
 type Web struct {
-	// Client sends the request. Nil uses a shared client that enforces the
-	// address rules on every connection, including redirects; a client
-	// supplied here is used as given, and only the pre-flight check applies.
+	// Client sends the request, and is where a host injects its own transport:
+	// an egress proxy, its own dialer, its own address rules. It is used as
+	// given — its proxy, dialing and redirect policy are the caller's — and
+	// Web still applies what does not depend on the transport: the scheme and
+	// pre-flight address check (unless Private), Timeout, and Max.
+	//
+	// Nil uses a shared client that connects directly and enforces the
+	// address rules on every connection, redirects included.
 	Client *http.Client
 	// Agent is the User-Agent header, "semantic" when empty.
 	Agent string
@@ -37,8 +47,9 @@ type Web struct {
 	Header http.Header
 	// Timeout bounds the whole fetch, 30s when zero.
 	Timeout time.Duration
-	// Max is the largest response body to read, in bytes. Zero means no
-	// limit.
+	// Max is the largest response body to read, in bytes. Zero means 32 MiB.
+	// There is no unbounded setting: how much a response holds is the
+	// server's choice, and a caller that expects more says how much.
 	Max int64
 	// Private allows internal addresses.
 	Private bool
@@ -95,7 +106,7 @@ func (w Web) Ingest(ctx context.Context, ref string) ([]semantic.Doc, error) {
 
 	limit := w.Max
 	if limit <= 0 {
-		limit = 1 << 62
+		limit = most
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
@@ -138,40 +149,48 @@ func (w Web) client() *http.Client {
 	return guard
 }
 
+// most is the response size Web reads when Max is unset.
+const most = 32 << 20
+
 // open fetches without address restrictions, for Private.
-var open = &http.Client{}
+var open = &http.Client{Transport: direct(nil)}
 
 // guard refuses to connect to an internal address, whichever hostname
 // resolves to it and however many redirects lead there.
 var guard = &http.Client{
-	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-			Control: func(_, address string, _ syscall.RawConn) error {
-				host, _, err := net.SplitHostPort(address)
-				if err != nil {
-					return err
-				}
-				ip := net.ParseIP(host)
-				if ip == nil || internal(ip) {
-					return fmt.Errorf("%w: %s", ErrBlocked, address)
-				}
-				return nil
-			},
-		}).DialContext,
-		MaxIdleConns:          32,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: time.Second,
-	},
+	Transport: direct(func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || internal(ip) {
+			return fmt.Errorf("%w: %s", ErrBlocked, address)
+		}
+		return nil
+	}),
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("ingest: too many redirects")
 		}
 		return safe(req.URL)
 	},
+}
+
+// direct is a transport that dials the target itself, with no proxy, and
+// runs control on every socket before it connects.
+func direct(control func(network, address string, c syscall.RawConn) error) *http.Transport {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control:   control,
+		}).DialContext,
+		MaxIdleConns:          32,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+	}
 }
 
 // safe rejects a URL this package must not fetch: a scheme other than http

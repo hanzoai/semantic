@@ -921,6 +921,45 @@ func TestWeb(t *testing.T) {
 	}
 }
 
+// TestWebProxy holds the clients this package builds to connecting directly.
+// The address rules are checked on the socket the connection lands on; a
+// proxy taken from the environment moves that socket to the proxy, so the
+// rules would vet the proxy's address and never the target's. A caller that
+// needs a proxy supplies Web.Client and owns the rules with it.
+func TestWebProxy(t *testing.T) {
+	for name, c := range map[string]*http.Client{"guard": guard, "open": open} {
+		tr, ok := c.Transport.(*http.Transport)
+		if !ok {
+			t.Errorf("%s: transport is %T, want an *http.Transport this package configured", name, c.Transport)
+			continue
+		}
+		if tr.Proxy != nil {
+			t.Errorf("%s: a proxy is set; a default client must connect directly", name)
+		}
+	}
+	if got := (Web{Client: http.DefaultClient}).client(); got != http.DefaultClient {
+		t.Error("a supplied client was not the one used")
+	}
+}
+
+// TestWebCap holds a fetch to a size even when the caller set none: a
+// response's length is the server's choice, and a reader with no ceiling
+// reads until memory runs out.
+func TestWebCap(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		chunk := bytes.Repeat([]byte("x"), 1<<20)
+		for range most/len(chunk) + 1 {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+	if _, err := (Web{Private: true}).Ingest(context.Background(), srv.URL); !errors.Is(err, ErrSize) {
+		t.Errorf("an unbounded response: %v, want ErrSize", err)
+	}
+}
+
 // TestWebBlocked checks the address rules: without Private, a fetch aimed
 // inside the network is refused before it is sent.
 func TestWebBlocked(t *testing.T) {
