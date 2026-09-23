@@ -47,14 +47,15 @@ var (
 type span struct{ start, end int }
 
 // chunks turns source ranges into the pipeline's value, numbering them from
-// zero so a chunk is identified by its document and its position in it.
+// zero so a chunk is identified by its document and its position in it, and
+// keeping the range so it is placed there too.
 func chunks(d semantic.Doc, spans []span) []semantic.Chunk {
 	if len(spans) == 0 {
 		return nil
 	}
 	out := make([]semantic.Chunk, len(spans))
 	for i, s := range spans {
-		out[i] = semantic.Chunk{DocID: d.ID, Index: i, Text: d.Text[s.start:s.end]}
+		out[i] = semantic.Chunk{DocID: d.ID, Index: i, Text: d.Text[s.start:s.end], Start: s.start, End: s.end}
 	}
 	return out
 }

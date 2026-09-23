@@ -13,8 +13,8 @@ import (
 
 func TestJSON(t *testing.T) {
 	want := "[\n" +
-		`{"subject":"Alice","predicate":"knows","object":"Bob","score":0.9,"doc":"d1","chunk":2,"text":"Alice knows Bob."}` + ",\n" +
-		`{"subject":"Bob","predicate":"works_at","object":"Acme Inc.","doc":"d1","chunk":3,"text":"Bob works at Acme Inc."}` + ",\n" +
+		`{"subject":"Alice","predicate":"knows","object":"Bob","score":0.9,"doc":"d1","chunk":2,"text":"Alice knows Bob.","start":40,"end":56}` + ",\n" +
+		`{"subject":"Bob","predicate":"works_at","object":"Acme Inc.","doc":"d1","chunk":3,"text":"Bob works at Acme Inc.","start":57,"end":79}` + ",\n" +
 		`{"subject":"Alice","predicate":"http://schema.org/knows","object":"https://example.org/carol"}` + "\n" +
 		"]\n"
 	if got := write(t, "json"); got != want {
@@ -66,8 +66,8 @@ func TestJSONRoundTrip(t *testing.T) {
 }
 
 func TestNDJSON(t *testing.T) {
-	want := `{"subject":"Alice","predicate":"knows","object":"Bob","score":0.9,"doc":"d1","chunk":2,"text":"Alice knows Bob."}` + "\n" +
-		`{"subject":"Bob","predicate":"works_at","object":"Acme Inc.","doc":"d1","chunk":3,"text":"Bob works at Acme Inc."}` + "\n" +
+	want := `{"subject":"Alice","predicate":"knows","object":"Bob","score":0.9,"doc":"d1","chunk":2,"text":"Alice knows Bob.","start":40,"end":56}` + "\n" +
+		`{"subject":"Bob","predicate":"works_at","object":"Acme Inc.","doc":"d1","chunk":3,"text":"Bob works at Acme Inc.","start":57,"end":79}` + "\n" +
 		`{"subject":"Alice","predicate":"http://schema.org/knows","object":"https://example.org/carol"}` + "\n"
 	if got := write(t, "ndjson"); got != want {
 		t.Errorf("ndjson wrote\n%s\nwant\n%s", got, want)

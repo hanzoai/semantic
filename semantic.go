@@ -17,11 +17,13 @@ type Doc struct {
 	Meta   map[string]any
 }
 
-// Chunk is a span of a Doc sized for extraction.
+// Chunk is a span of a Doc sized for extraction. Start and End are the byte
+// offsets of the span in the Doc's Text, so Text is doc.Text[Start:End].
 type Chunk struct {
-	DocID string
-	Index int
-	Text  string
+	DocID      string
+	Index      int
+	Text       string
+	Start, End int
 }
 
 // Triple is one assertion an extractor found, with the span it came from.
@@ -87,7 +89,7 @@ func (p Pipeline) Run(ctx context.Context, ref string) ([]Triple, error) {
 				return nil, err
 			}
 		}
-		chunks := []Chunk{{DocID: d.ID, Text: d.Text}}
+		chunks := []Chunk{{DocID: d.ID, Text: d.Text, End: len(d.Text)}}
 		if p.Split != nil {
 			if chunks, err = p.Split.Split(ctx, d); err != nil {
 				return nil, err

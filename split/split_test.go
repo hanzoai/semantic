@@ -126,6 +126,38 @@ func TestTile(t *testing.T) {
 	}
 }
 
+// TestOffsets holds every splitter, overlapping or not, to placing each chunk
+// in its document: Start and End are the byte range the chunk's text came
+// from, so a caller can cite it, highlight it, or find its neighbours.
+func TestOffsets(t *testing.T) {
+	all := tiling()
+	for name, s := range map[string]semantic.Splitter{
+		"Chars/overlap":      Chars{Size: 40, Overlap: 10},
+		"Words/overlap":      Words{Size: 5, Overlap: 2},
+		"Tokens/overlap":     Tokens{Size: 8, Overlap: 3},
+		"Sentences/overlap":  Sentences{Size: 60, Overlap: 1},
+		"Paragraphs/overlap": Paragraphs{Size: 40, Overlap: 1},
+		"Recursive/overlap":  Recursive{Size: 40, Overlap: 1},
+		"Or":                 Or{nothing{}, Sentences{Size: 60}},
+	} {
+		all[name] = s
+	}
+	for name, s := range all {
+		for label, text := range texts {
+			t.Run(name+"/"+label, func(t *testing.T) {
+				for i, c := range split(t, s, text) {
+					if c.Start < 0 || c.End > len(text) || c.Start > c.End {
+						t.Fatalf("chunk %d spans [%d,%d) of %d bytes", i, c.Start, c.End, len(text))
+					}
+					if text[c.Start:c.End] != c.Text {
+						t.Errorf("chunk %d: text[%d:%d] = %q, want %q", i, c.Start, c.End, text[c.Start:c.End], c.Text)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestEmpty(t *testing.T) {
 	for name, s := range tiling() {
 		t.Run(name, func(t *testing.T) {

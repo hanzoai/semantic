@@ -13,7 +13,7 @@ import (
 
 // cols are the columns of the tabular formats, in order. They are the fields
 // of an assertion, so a spreadsheet holds everything the graph knew.
-var cols = []string{"subject", "predicate", "object", "score", "doc", "chunk", "text"}
+var cols = []string{"subject", "predicate", "object", "score", "doc", "chunk", "text", "start", "end"}
 
 // CSV writes the graph as a table, a row to an assertion, carrying every
 // field. Sep is the column separator, a comma when unset; the registry has it
@@ -52,6 +52,8 @@ func (c CSV) Write(ctx context.Context, w io.Writer, src Source) error {
 			t.From.DocID,
 			strconv.Itoa(t.From.Index),
 			t.From.Text,
+			strconv.Itoa(t.From.Start),
+			strconv.Itoa(t.From.End),
 		})
 	})
 	if err != nil {
@@ -112,9 +114,13 @@ func (c CSV) Read(r io.Reader) Source {
 			if err != nil {
 				return fmt.Errorf("csv line %d score: %w", line, err)
 			}
-			chunk, err := number(cell("chunk"))
-			if err != nil {
-				return fmt.Errorf("csv line %d chunk: %w", line, err)
+			var place [3]int // chunk, start, end
+			for i, name := range []string{"chunk", "start", "end"} {
+				n, err := number(cell(name))
+				if err != nil {
+					return fmt.Errorf("csv line %d %s: %w", line, name, err)
+				}
+				place[i] = int(n)
 			}
 			t := semantic.Triple{
 				Subject:   cell("subject"),
@@ -123,8 +129,10 @@ func (c CSV) Read(r io.Reader) Source {
 				Score:     score,
 				From: semantic.Chunk{
 					DocID: cell("doc"),
-					Index: int(chunk),
+					Index: place[0],
 					Text:  cell("text"),
+					Start: place[1],
+					End:   place[2],
 				},
 			}
 			if err := yield(t); err != nil {

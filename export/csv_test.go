@@ -11,10 +11,10 @@ import (
 )
 
 func TestCSV(t *testing.T) {
-	want := "subject,predicate,object,score,doc,chunk,text\n" +
-		"Alice,knows,Bob,0.9,d1,2,Alice knows Bob.\n" +
-		"Bob,works_at,Acme Inc.,0,d1,3,Bob works at Acme Inc.\n" +
-		"Alice,http://schema.org/knows,https://example.org/carol,0,,0,\n"
+	want := "subject,predicate,object,score,doc,chunk,text,start,end\n" +
+		"Alice,knows,Bob,0.9,d1,2,Alice knows Bob.,40,56\n" +
+		"Bob,works_at,Acme Inc.,0,d1,3,Bob works at Acme Inc.,57,79\n" +
+		"Alice,http://schema.org/knows,https://example.org/carol,0,,0,,0,0\n"
 	if got := write(t, "csv"); got != want {
 		t.Errorf("csv wrote\n%s\nwant\n%s", got, want)
 	}
@@ -108,7 +108,7 @@ func TestCSVEmpty(t *testing.T) {
 	if err := (CSV{}).Write(context.Background(), &b, Triples(nil)); err != nil {
 		t.Fatal(err)
 	}
-	if b.String() != "subject,predicate,object,score,doc,chunk,text\n" {
+	if b.String() != "subject,predicate,object,score,doc,chunk,text,start,end\n" {
 		t.Errorf("an empty graph wrote %q", b.String())
 	}
 	if got := collect(t, CSV{}.Read(&b)); got != nil {

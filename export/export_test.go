@@ -22,11 +22,11 @@ func graph() []semantic.Triple {
 	return []semantic.Triple{
 		{
 			Subject: "Alice", Predicate: "knows", Object: "Bob", Score: 0.9,
-			From: semantic.Chunk{DocID: "d1", Index: 2, Text: "Alice knows Bob."},
+			From: semantic.Chunk{DocID: "d1", Index: 2, Text: "Alice knows Bob.", Start: 40, End: 56},
 		},
 		{
 			Subject: "Bob", Predicate: "works_at", Object: "Acme Inc.",
-			From: semantic.Chunk{DocID: "d1", Index: 3, Text: "Bob works at Acme Inc."},
+			From: semantic.Chunk{DocID: "d1", Index: 3, Text: "Bob works at Acme Inc.", Start: 57, End: 79},
 		},
 		{
 			Subject: "Alice", Predicate: "http://schema.org/knows",

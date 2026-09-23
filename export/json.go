@@ -23,6 +23,8 @@ type record struct {
 	Doc       string  `json:"doc,omitempty"`
 	Chunk     int     `json:"chunk,omitempty"`
 	Text      string  `json:"text,omitempty"`
+	Start     int     `json:"start,omitempty"`
+	End       int     `json:"end,omitempty"`
 }
 
 func rec(t semantic.Triple) record {
@@ -34,6 +36,8 @@ func rec(t semantic.Triple) record {
 		Doc:       t.From.DocID,
 		Chunk:     t.From.Index,
 		Text:      t.From.Text,
+		Start:     t.From.Start,
+		End:       t.From.End,
 	}
 }
 
@@ -43,7 +47,7 @@ func (r record) triple() semantic.Triple {
 		Predicate: r.Predicate,
 		Object:    r.Object,
 		Score:     r.Score,
-		From:      semantic.Chunk{DocID: r.Doc, Index: r.Chunk, Text: r.Text},
+		From:      semantic.Chunk{DocID: r.Doc, Index: r.Chunk, Text: r.Text, Start: r.Start, End: r.End},
 	}
 }
 
