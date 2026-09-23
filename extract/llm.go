@@ -43,7 +43,8 @@ type LLM struct {
 }
 
 // Link is a relation as the model stated it: endpoints named by text, not yet
-// bound to any entity.
+// bound to any entity. Score is the confidence the model stated, zero when it
+// stated none.
 type Link struct {
 	Subject   string
 	Predicate string
@@ -278,10 +279,10 @@ func (l LLM) list(text string, known []Entity) string {
 }
 
 // stranger is the placeholder for an endpoint the model named that no entity
-// pass found.
+// pass found. No pass scored it, so it has no Score.
 func stranger(text string) Entity {
 	return Entity{
-		Text: text, Label: "UNKNOWN", End: len(text), Score: 0.8,
+		Text: text, Label: "UNKNOWN", End: len(text),
 		Meta: map[string]any{"by": "llm", "loose": true},
 	}
 }

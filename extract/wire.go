@@ -66,22 +66,14 @@ func (n *number) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// or returns the number, or fallback when the model sent none.
-func (n number) or(fallback float64) float64 {
-	if n.Set {
-		return n.Value
-	}
-	return fallback
-}
-
-// stated is the confidence a model reply carries under either spelling. A
-// stated item with no confidence is not a zero-confidence item, so it takes
-// the default the Python schemas use.
+// stated is the confidence a model reply carries under either spelling, and
+// zero when it carries none: an item the model did not score is unscored, not
+// given a number the model never sent.
 func (w wire) stated() float64 {
 	if w.Confidence.Set {
 		return w.Confidence.Value
 	}
-	return w.Score.or(0.9)
+	return w.Score.Value
 }
 
 // UnmarshalJSON reads an entity as a model returned it. Offsets are optional —
@@ -129,7 +121,7 @@ func (k *Link) UnmarshalJSON(b []byte) error {
 		Score:     w.stated(),
 		From:      w.From,
 		Until:     w.Until,
-		When:      w.When.or(0),
+		When:      w.When.Value,
 		Cite:      w.Cite,
 	}
 	return nil

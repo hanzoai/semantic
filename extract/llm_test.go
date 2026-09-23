@@ -171,7 +171,7 @@ func TestEntityWire(t *testing.T) {
 		{
 			"type for label, value for text",
 			`{"value":"Alice","type":"PERSON"}`,
-			Entity{Text: "Alice", Label: "PERSON", End: 5, Score: 0.9},
+			Entity{Text: "Alice", Label: "PERSON", End: 5},
 		},
 		{
 			"offsets under their long names",
@@ -184,10 +184,11 @@ func TestEntityWire(t *testing.T) {
 			Entity{Text: "Alice", Label: "PERSON", End: 5, Score: 0.5},
 		},
 		{
-			// A stated entity with no score is not a zero-confidence entity.
+			// A stated entity with no score has none, and no number is made up
+			// for it: zero is unscored.
 			"no confidence at all",
 			`{"text":"  Alice  ","label":"PERSON"}`,
-			Entity{Text: "Alice", Label: "PERSON", End: 5, Score: 0.9},
+			Entity{Text: "Alice", Label: "PERSON", End: 5},
 		},
 		{
 			"a confidence outside the range it was asked for",
@@ -237,7 +238,7 @@ func TestLinkWire(t *testing.T) {
 		{
 			"source and target for the endpoints, label for the predicate",
 			`{"source":"Apple","label":"acquired","target":"Beats"}`,
-			Link{Subject: "Apple", Predicate: "acquired", Object: "Beats", Score: 0.9},
+			Link{Subject: "Apple", Predicate: "acquired", Object: "Beats"},
 		},
 		{
 			"with the time it held",
@@ -254,7 +255,7 @@ func TestLinkWire(t *testing.T) {
 			`{"subject":"Microsoft","predicate":"develops","object":"Windows",
 			  "valid_from":null,"valid_until":null,"temporal_confidence":0.0,
 			  "temporal_source_text":null}`,
-			Link{Subject: "Microsoft", Predicate: "develops", Object: "Windows", Score: 0.9},
+			Link{Subject: "Microsoft", Predicate: "develops", Object: "Windows"},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -390,8 +391,8 @@ func TestLLMRelations(t *testing.T) {
 		t.Errorf("Steve Jobs = %+v, want the known entity", got[0].Subject)
 	}
 	for _, r := range got[1:] {
-		if r.Subject.Label != "UNKNOWN" || r.Subject.Meta["loose"] != true {
-			t.Errorf("%q = %+v, want an UNKNOWN entity marked loose", r.Subject.Text, r.Subject)
+		if r.Subject.Label != "UNKNOWN" || r.Subject.Meta["loose"] != true || r.Subject.Score != 0 {
+			t.Errorf("%q = %+v, want an unscored UNKNOWN entity marked loose", r.Subject.Text, r.Subject)
 		}
 	}
 }
@@ -542,7 +543,7 @@ func TestLLMTriples(t *testing.T) {
 	}
 	want := []semantic.Triple{
 		{Subject: "Apple", Predicate: "founded_by", Object: jobs, From: c, Score: 0.95},
-		{Subject: "Apple", Predicate: "related_to", Object: "Cupertino", From: c, Score: 0.9},
+		{Subject: "Apple", Predicate: "related_to", Object: "Cupertino", From: c},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("triples = %+v, want %+v", got, want)

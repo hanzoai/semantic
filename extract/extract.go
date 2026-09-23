@@ -23,7 +23,7 @@ import (
 
 // Entity is a labelled span of the text it was found in. Start and End are
 // byte offsets, so text[Start:End] is the span. Score is the extractor's
-// confidence in [0,1].
+// confidence in [0,1], and zero when it gave none: no score is ever made up.
 type Entity struct {
 	Text  string
 	Label string
