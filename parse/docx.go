@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
@@ -27,35 +26,37 @@ import (
 type Docx struct{}
 
 // Parse reads the document's body, headings and properties.
-func (Docx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
-	z, err := unzip(d.Text)
+func (Docx) Parse(ctx context.Context, d semantic.Doc) (semantic.Doc, error) {
+	p, err := unzip(ctx, d.Text)
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
-	main, core, err := begin(z)
+	main, core, err := begin(p)
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
-	doc, err := part[elem](z, main)
+	doc, err := part[elem](p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
-	r, err := related(z, main)
+	r, err := related(p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
-	lv, err := levels(z, r.kind("styles"))
+	lv, err := levels(p, r.kind("styles"))
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
-	tags, err := props(z, core)
+	tags, err := props(p, core)
 	if err != nil {
 		return d, fmt.Errorf("parse docx: %w", err)
 	}
 
-	w := word{lv: lv}
+	w := word{p: p, lv: lv}
 	if body := doc.kid("body"); body != nil {
-		w.blocks(body)
+		if err := w.blocks(body); err != nil {
+			return d, fmt.Errorf("parse docx: %w", err)
+		}
 	}
 	w.b.trim()
 
@@ -75,6 +76,7 @@ func (Docx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 
 // word is a document body being laid out as text.
 type word struct {
+	p    *pkg
 	b    buf
 	secs []Section
 	lv   map[string]int // outline level by style id
@@ -83,21 +85,26 @@ type word struct {
 // blocks writes the block-level content of e in order. Content controls and
 // custom XML wrap blocks without being blocks themselves, and are read
 // through.
-func (w *word) blocks(e *elem) {
+func (w *word) blocks(e *elem) error {
 	for _, k := range e.kids {
+		var err error
 		switch k.name {
 		case "p":
 			w.para(k)
 		case "tbl":
-			w.table(k)
+			err = w.table(k)
 		case "sdt":
 			if c := k.kid("sdtContent"); c != nil {
-				w.blocks(c)
+				err = w.blocks(c)
 			}
 		case "customXml":
-			w.blocks(k)
+			err = w.blocks(k)
+		}
+		if err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 // para writes one paragraph as a line, and opens a section when it is a
@@ -138,7 +145,7 @@ func (w *word) level(p *elem) int {
 // table writes a table's rows as records. A cell merged across columns
 // advances the column count by its span, so the cells after it stay under
 // the names above them.
-func (w *word) table(t *elem) {
+func (w *word) table(t *elem) error {
 	var rows [][]cell
 	for _, tr := range t.kids {
 		if tr.name != "tr" {
@@ -157,13 +164,13 @@ func (w *word) table(t *elem) {
 		}
 		rows = append(rows, row)
 	}
-	grid(&w.b, rows)
+	return grid(w.p, &w.b, rows)
 }
 
 // levels reads the heading level of every paragraph style: its own outline
 // level, else the level its built-in name implies, else its base style's. A
 // document without a styles part has none.
-func levels(z *zip.Reader, name string) (map[string]int, error) {
+func levels(p *pkg, name string) (map[string]int, error) {
 	st, err := part[struct {
 		Style []struct {
 			Type string `xml:"type,attr"`
@@ -178,7 +185,7 @@ func levels(z *zip.Reader, name string) (map[string]int, error) {
 				Val string `xml:"val,attr"`
 			} `xml:"pPr>outlineLvl"`
 		} `xml:"style"`
-	}](z, name)
+	}](p, name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -203,22 +210,35 @@ func levels(z *zip.Reader, name string) (map[string]int, error) {
 		}
 		by[s.ID] = style{own: own, based: s.Based.Val}
 	}
-	var find func(id string, depth int) int
-	find = func(id string, depth int) int {
-		s, ok := by[id]
-		switch {
-		case !ok || depth > len(by):
-			return 0 // unknown, or a cycle of styles based on each other
-		case s.own >= 0:
-			return s.own
-		case s.based != "":
-			return find(s.based, depth+1)
-		}
-		return 0
-	}
+	// Each chain is walked until it reaches a style that says, or one already
+	// resolved, and every style on the walk takes that level, so each style
+	// is walked once. A style on the walk is marked 0 as it is passed, so a
+	// chain that comes back to itself — styles based on each other — ends
+	// there, as body text, and so does one based on a style never defined.
 	out := make(map[string]int, len(by))
 	for id := range by {
-		out[id] = find(id, 0)
+		var walk []string
+		n := 0
+		for at := id; ; {
+			if v, ok := out[at]; ok {
+				n = v
+				break
+			}
+			s, ok := by[at]
+			if !ok {
+				break
+			}
+			out[at] = 0
+			walk = append(walk, at)
+			if s.own >= 0 || s.based == "" {
+				n = max(s.own, 0)
+				break
+			}
+			at = s.based
+		}
+		for _, at := range walk {
+			out[at] = n
+		}
 	}
 	return out, nil
 }

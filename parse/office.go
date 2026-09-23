@@ -3,6 +3,7 @@ package parse
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -18,22 +19,61 @@ import (
 // legacy binary formats — doc, xls, ppt — are a different container
 // altogether, and stay placeholders that report ErrFormat.
 
-// most is the largest part this package will decompress, in bytes. A zip
-// states each part's size and archive/zip holds the part to it, so the check
-// is made before a byte is inflated, and a small file that would inflate to
-// gigabytes is refused rather than read.
+// most is what reading one package may spend, in bytes: the stated size of
+// each part each time it is read, a node for each element decoded, and the
+// text each table writes. Each is charged before it happens — a zip states a
+// part's size and archive/zip holds the part to it — so a small file that
+// would inflate to gigabytes, name one part or one string without end, or
+// decode to a tree many times its size is refused rather than read.
 const most = 1 << 28
+
+// node is what an element costs to decode: about what a tree holds for one,
+// the element with its name and its place among its parent's children.
+const node = 128
+
+// errSpent reports a package that costs more than most to read.
+var errSpent = fmt.Errorf("package costs more than %d bytes to read", most)
+
+// pkg is an OOXML package being read, and what reading it may still spend.
+type pkg struct {
+	ctx  context.Context
+	z    *zip.Reader
+	left int
+}
+
+// unzip opens a document's bytes as the package they are. Ingest keeps a
+// binary source's bytes as they were, so Doc.Text is the file.
+func unzip(ctx context.Context, d string) (*pkg, error) {
+	z, err := zip.NewReader(strings.NewReader(d), int64(len(d)))
+	if err != nil {
+		return nil, err
+	}
+	return &pkg{ctx: ctx, z: z, left: most}, nil
+}
+
+// spend charges n bytes to the read. It fails once the caller's context is
+// done or the budget is gone, and the read stops there.
+func (p *pkg) spend(n int) error {
+	if err := p.ctx.Err(); err != nil {
+		return err
+	}
+	if n < 0 || n > p.left {
+		return errSpent
+	}
+	p.left -= n
+	return nil
+}
 
 // part decodes the named part of an OOXML package, as XML, into a T. A part
 // the package does not have reports fs.ErrNotExist, and so does the empty
 // name a missing relationship resolves to; that is how the readers tell an
 // optional part — styles, shared strings, notes — from a broken one.
-func part[T any](z *zip.Reader, name string) (T, error) {
+func part[T any](p *pkg, name string) (T, error) {
 	var v T
 	if name == "" {
 		return v, fs.ErrNotExist
 	}
-	f, err := z.Open(name)
+	f, err := p.z.Open(name)
 	if err != nil {
 		return v, err
 	}
@@ -42,19 +82,31 @@ func part[T any](z *zip.Reader, name string) (T, error) {
 	if err != nil {
 		return v, err
 	}
-	if fi.Size() > most {
-		return v, fmt.Errorf("%s inflates to %d bytes, over %d", name, fi.Size(), most)
+	if err := p.spend(int(fi.Size())); err != nil {
+		return v, fmt.Errorf("%s: %w", name, err)
 	}
-	if err := xml.NewDecoder(f).Decode(&v); err != nil {
+	if err := xml.NewTokenDecoder(meter{xml.NewDecoder(f), p}).Decode(&v); err != nil {
 		return v, fmt.Errorf("%s: %w", name, err)
 	}
 	return v, nil
 }
 
-// unzip opens a document's bytes as the package they are. Ingest keeps a
-// binary source's bytes as they were, so Doc.Text is the file.
-func unzip(d string) (*zip.Reader, error) {
-	return zip.NewReader(strings.NewReader(d), int64(len(d)))
+// meter passes a part's tokens on, charging a node for each element as it
+// starts. The raw tokens are passed, and the decoder reading them checks
+// their nesting and resolves their namespaces.
+type meter struct {
+	d *xml.Decoder
+	p *pkg
+}
+
+func (m meter) Token() (xml.Token, error) {
+	t, err := m.d.RawToken()
+	if _, ok := t.(xml.StartElement); ok {
+		if err := m.p.spend(node); err != nil {
+			return nil, err
+		}
+	}
+	return t, err
 }
 
 // rels is a part's relationships: what it refers to, by id and by type.
@@ -70,9 +122,9 @@ type rels struct {
 // related reads the relationships of the part named src, with each internal
 // target resolved to the part name it points at. A part with no relationships
 // has none, which is not an error.
-func related(z *zip.Reader, src string) (rels, error) {
+func related(p *pkg, src string) (rels, error) {
 	dir, file := path.Split(src)
-	r, err := part[rels](z, dir+"_rels/"+file+".rels")
+	r, err := part[rels](p, dir+"_rels/"+file+".rels")
 	if errors.Is(err, fs.ErrNotExist) {
 		return rels{}, nil
 	}
@@ -115,8 +167,8 @@ func (r rels) kind(name string) string {
 
 // begin reads the package's own relationships: the main document part, and
 // the core properties part when there is one.
-func begin(z *zip.Reader) (doc, core string, err error) {
-	r, err := related(z, "")
+func begin(p *pkg) (doc, core string, err error) {
+	r, err := related(p, "")
 	if err != nil {
 		return "", "", err
 	}
@@ -129,7 +181,7 @@ func begin(z *zip.Reader) (doc, core string, err error) {
 
 // props reads the core properties — the title, author and dates a document
 // carries about itself — as tags. A package without them has none.
-func props(z *zip.Reader, name string) (map[string]string, error) {
+func props(p *pkg, name string) (map[string]string, error) {
 	c, err := part[struct {
 		Title       string `xml:"title"`
 		Subject     string `xml:"subject"`
@@ -138,7 +190,7 @@ func props(z *zip.Reader, name string) (map[string]string, error) {
 		Description string `xml:"description"`
 		Created     string `xml:"created"`
 		Modified    string `xml:"modified"`
-	}](z, name)
+	}](p, name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -289,7 +341,11 @@ type cell struct {
 // mean. A column the first row leaves unnamed is named by its number from
 // one. A table of a single row has nothing but names, and they are written as
 // lines of text.
-func grid(b *buf, rows [][]cell) {
+//
+// A table writes what it holds once as many times as it is named — a
+// column's name on every row, a shared string in every cell that points at
+// it — so what it writes is charged to p before any of it is.
+func grid(p *pkg, b *buf, rows [][]cell) error {
 	var full [][]cell
 	for _, r := range rows {
 		if len(r) > 0 {
@@ -297,7 +353,23 @@ func grid(b *buf, rows [][]cell) {
 		}
 	}
 	if len(full) == 0 {
-		return
+		return nil
+	}
+	names := map[int]string{}
+	for _, c := range full[0] {
+		names[c.col] = strings.TrimSpace(strings.TrimPrefix(c.text, "\ufeff"))
+	}
+	size := 0
+	for i, r := range full {
+		for _, c := range r {
+			size += len(c.text)
+			if i > 0 {
+				size += len(names[c.col])
+			}
+		}
+	}
+	if err := p.spend(size); err != nil {
+		return err
 	}
 	if len(full) == 1 {
 		b.gap()
@@ -305,11 +377,7 @@ func grid(b *buf, rows [][]cell) {
 			b.put(c.text)
 			b.nl()
 		}
-		return
-	}
-	names := map[int]string{}
-	for _, c := range full[0] {
-		names[c.col] = strings.TrimSpace(strings.TrimPrefix(c.text, "\ufeff"))
+		return nil
 	}
 	for _, r := range full[1:] {
 		b.gap()
@@ -324,6 +392,7 @@ func grid(b *buf, rows [][]cell) {
 			b.nl()
 		}
 	}
+	return nil
 }
 
 // gap starts a block: it ends the current line and leaves one blank line
@@ -340,11 +409,11 @@ func (x *buf) gap() {
 // is how every producer lays the package out: word/, xl/ or ppt/. Any other
 // zip is "zip", which no format reads.
 func office(s string) string {
-	z, err := unzip(s)
+	p, err := unzip(context.Background(), s)
 	if err != nil {
 		return "zip"
 	}
-	doc, _, err := begin(z)
+	doc, _, err := begin(p)
 	if err != nil {
 		return "zip"
 	}

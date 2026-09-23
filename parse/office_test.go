@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/semantic"
 	"github.com/hanzoai/semantic/ingest"
@@ -409,38 +412,45 @@ func TestOfficeSniff(t *testing.T) {
 	}
 }
 
-// TestOfficeBroken holds the readers to failing on what they cannot read: a
-// file that is not a zip, a zip with no main part, and a part that would
-// inflate past the limit, refused before it is inflated.
-func TestOfficeBroken(t *testing.T) {
-	// A part whose header claims more than the limit: four bytes stored, a
-	// quarter of a gigabyte promised.
-	var big bytes.Buffer
-	z := zip.NewWriter(&big)
-	w, err := z.Create("_rels/.rels")
+// claim zips parts as pack does, and stores the named part as inflating to
+// size bytes, whatever it holds. A zip states each part's size, and the
+// statement is what a read is charged: a part whose XML ends before the
+// claimed size is read to its end and no further.
+func claim(t *testing.T, name string, size uint64, body string, parts ...string) string {
+	t.Helper()
+	var b bytes.Buffer
+	z := zip.NewWriter(&b)
+	w, err := z.CreateRaw(&zip.FileHeader{
+		Name: name, Method: zip.Store,
+		CompressedSize64: uint64(len(body)), UncompressedSize64: size,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Write([]byte(links("rId1", "officeDocument", "word/document.xml"))); err != nil {
+	if _, err := w.Write([]byte(body)); err != nil {
 		t.Fatal(err)
 	}
-	if w, err = z.CreateRaw(&zip.FileHeader{
-		Name: "word/document.xml", Method: zip.Store,
-		CompressedSize64: 4, UncompressedSize64: most + 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write([]byte("<w:d")); err != nil {
-		t.Fatal(err)
+	for i := 0; i+1 < len(parts); i += 2 {
+		w, err := z.Create(parts[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(parts[i+1])); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := z.Close(); err != nil {
 		t.Fatal(err)
 	}
+	return b.String()
+}
 
+// TestOfficeBroken holds the readers to failing on what they cannot read: a
+// file that is not a zip and a zip with no main part.
+func TestOfficeBroken(t *testing.T) {
 	for name, text := range map[string]string{
 		"not a zip":    "just text",
 		"no main part": pack(t, "word/document.xml", "<w:document/>"),
-		"bomb":         big.String(),
 	} {
 		for _, f := range []Format{Docx{}, Pptx{}, Xlsx{}} {
 			if _, err := f.Parse(context.Background(), doc("x", text)); err == nil || errors.Is(err, ErrFormat) {
@@ -460,5 +470,147 @@ func TestOfficeBroken(t *testing.T) {
 		if _, err := f.Parse(context.Background(), doc("x", nested)); err == nil || !strings.Contains(err.Error(), "deeper") {
 			t.Errorf("nesting past %d through %T: %v, want it refused", deepest, f, err)
 		}
+	}
+}
+
+// TestOfficeSpend holds a read to its budget. Each part read is charged its
+// inflated size, each element decoded from it a node, and each table the text
+// it writes, and a package that would spend more than most is refused however
+// small its file: one part claimed past the budget, one part named four
+// times, one string written into many cells, many elements in a part that
+// left room for few.
+func TestOfficeSpend(t *testing.T) {
+	root := func(main string) string { return links("rId1", "officeDocument", main) }
+	deck := func(n int) string {
+		var b strings.Builder
+		b.WriteString(`<p:presentation ` + nsP + ` ` + nsR + `><p:sldIdLst>`)
+		for i := range n {
+			fmt.Fprintf(&b, `<p:sldId id="%d" r:id="rId2"/>`, 256+i)
+		}
+		b.WriteString(`</p:sldIdLst></p:presentation>`)
+		return b.String()
+	}
+	book := func(n int) string {
+		var b strings.Builder
+		b.WriteString(`<workbook ` + nsX + ` ` + nsR + `><sheets>`)
+		for i := range n {
+			fmt.Fprintf(&b, `<sheet name="S%d" sheetId="%d" r:id="rId2"/>`, i, i+1)
+		}
+		b.WriteString(`</sheets></workbook>`)
+		return b.String()
+	}
+	// shared is a workbook whose one shared string, 64 KiB of it, is the
+	// header and every value of a column n rows long, in a package that
+	// leaves a MiB to spend once the string is read.
+	shared := func(n int) string {
+		var b strings.Builder
+		b.WriteString(`<worksheet ` + nsX + `><sheetData>`)
+		for range n + 1 {
+			b.WriteString(`<row><c t="s"><v>0</v></c></row>`)
+		}
+		b.WriteString(`</sheetData></worksheet>`)
+		return claim(t, "xl/sharedStrings.xml", most-1<<20,
+			`<sst `+nsX+`><si><t>`+strings.Repeat("x", 64<<10)+`</t></si></sst>`,
+			"_rels/.rels", root("xl/workbook.xml"),
+			"xl/workbook.xml", book(1),
+			"xl/_rels/workbook.xml.rels", links("rId2", "worksheet", "sheet.xml", "rId3", "sharedStrings", "sharedStrings.xml"),
+			"xl/sheet.xml", b.String())
+	}
+	crowd := strings.Repeat("<w:p/>", 1024) // 128 KiB of nodes
+
+	for _, c := range []struct {
+		name string
+		f    Format
+		text string
+	}{
+		{"a part claimed past the budget", Docx{}, claim(t, "word/document.xml", most+1, `<w:document `+nsW+`/>`,
+			"_rels/.rels", root("word/document.xml"))},
+		{"a part claimed past what a size holds", Docx{}, claim(t, "word/document.xml", 1<<63, `<w:document `+nsW+`/>`,
+			"_rels/.rels", root("word/document.xml"))},
+		{"one slide shown four times", Pptx{}, claim(t, "ppt/slide.xml", most/4+1, `<p:sld `+nsP+`/>`,
+			"_rels/.rels", root("ppt/presentation.xml"),
+			"ppt/presentation.xml", deck(4),
+			"ppt/_rels/presentation.xml.rels", links("rId2", "slide", "slide.xml"))},
+		{"one sheet listed four times", Xlsx{}, claim(t, "xl/sheet.xml", most/4+1, `<worksheet `+nsX+`/>`,
+			"_rels/.rels", root("xl/workbook.xml"),
+			"xl/workbook.xml", book(4),
+			"xl/_rels/workbook.xml.rels", links("rId2", "worksheet", "sheet.xml"))},
+		{"one string in many cells", Xlsx{}, shared(16)},
+		{"many elements in a body", Docx{}, claim(t, "word/document.xml", most-64<<10,
+			`<w:document `+nsW+`><w:body>`+crowd+`</w:body></w:document>`,
+			"_rels/.rels", root("word/document.xml"))},
+		{"many cells in a sheet", Xlsx{}, claim(t, "xl/sheet.xml", most-64<<10,
+			`<worksheet `+nsX+`><sheetData><row>`+strings.Repeat("<c/>", 1024)+`</row></sheetData></worksheet>`,
+			"_rels/.rels", root("xl/workbook.xml"),
+			"xl/workbook.xml", book(1),
+			"xl/_rels/workbook.xml.rels", links("rId2", "worksheet", "sheet.xml"))},
+	} {
+		if _, err := c.f.Parse(context.Background(), doc("x", c.text)); !errors.Is(err, errSpent) {
+			t.Errorf("%s: %v, want it refused as over the budget", c.name, err)
+		}
+	}
+
+	// The same string in a few cells is within it.
+	d := read(t, Xlsx{}, doc("x", shared(4)))
+	if n := strings.Count(d.Text, strings.Repeat("x", 64<<10)); n != 8 {
+		t.Errorf("a string in four records written %d times, want 8: a name and a value each", n)
+	}
+
+	// A caller that has given up stops the read.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, c := range []struct {
+		f    Format
+		text string
+	}{{Docx{}, docxFixture(t)}, {Pptx{}, pptxFixture(t)}, {Xlsx{}, xlsxFixture(t, false)}} {
+		if _, err := c.f.Parse(ctx, doc("x", c.text)); !errors.Is(err, context.Canceled) {
+			t.Errorf("%T with its context cancelled: %v, want context.Canceled", c.f, err)
+		}
+	}
+}
+
+// TestDocxStyleChain resolves styles in time linear in their number: a chain
+// of styles, each based on the next, reads in about the time as many styles
+// based on nothing do. The style at the end of the chain names the level of
+// all of it, and a cycle of styles is body text.
+func TestDocxStyleChain(t *testing.T) {
+	const n = 1 << 13
+	styles := func(chain bool) string {
+		var st strings.Builder
+		st.WriteString(`<w:styles ` + nsW + `>`)
+		for i := range n {
+			base := fmt.Sprintf("x%d", i) // a style never defined
+			if chain {
+				base = fmt.Sprintf("s%d", i+1)
+			}
+			fmt.Fprintf(&st, `<w:style w:type="paragraph" w:styleId="s%d"><w:name w:val="s%d"/><w:basedOn w:val="%s"/></w:style>`, i, i, base)
+		}
+		fmt.Fprintf(&st, `<w:style w:type="paragraph" w:styleId="s%d"><w:name w:val="heading 3"/></w:style>`, n)
+		st.WriteString(`<w:style w:type="paragraph" w:styleId="a"><w:name w:val="a"/><w:basedOn w:val="b"/></w:style>` +
+			`<w:style w:type="paragraph" w:styleId="b"><w:name w:val="b"/><w:basedOn w:val="a"/></w:style></w:styles>`)
+		style := func(id string) string { return `<w:pPr><w:pStyle w:val="` + id + `"/></w:pPr>` }
+		return pack(t,
+			"_rels/.rels", links("rId1", "officeDocument", "word/document.xml"),
+			"word/_rels/document.xml.rels", links("rId1", "styles", "styles.xml"),
+			"word/styles.xml", st.String(),
+			"word/document.xml", `<w:document `+nsW+`><w:body>`+
+				para("w", style("s0"), "Deep")+para("w", style("a"), "Loop")+`</w:body></w:document>`)
+	}
+	loose, chained := styles(false), styles(true)
+	timed := func(z string) time.Duration {
+		start := time.Now()
+		read(t, Docx{}, doc("x.docx", z))
+		return time.Since(start)
+	}
+	flat, chain := time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
+	for range 3 {
+		flat, chain = min(flat, timed(loose)), min(chain, timed(chained))
+	}
+	if chain > 10*flat {
+		t.Errorf("%d styles in a chain took %v, and unchained %v", n, chain, flat)
+	}
+	if secs := Sections(read(t, Docx{}, doc("x.docx", chained))); len(secs) != 1 ||
+		secs[0].Title != "Deep" || secs[0].Level != 3 {
+		t.Errorf("sections = %+v, want Deep at level 3 and Loop as body text", secs)
 	}
 }

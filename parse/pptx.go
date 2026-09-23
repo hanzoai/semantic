@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -24,12 +23,12 @@ import (
 type Pptx struct{}
 
 // Parse reads every slide of the deck, and its notes.
-func (Pptx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
-	z, err := unzip(d.Text)
+func (Pptx) Parse(ctx context.Context, d semantic.Doc) (semantic.Doc, error) {
+	p, err := unzip(ctx, d.Text)
 	if err != nil {
 		return d, fmt.Errorf("parse pptx: %w", err)
 	}
-	main, core, err := begin(z)
+	main, core, err := begin(p)
 	if err != nil {
 		return d, fmt.Errorf("parse pptx: %w", err)
 	}
@@ -37,26 +36,26 @@ func (Pptx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 		Slides []struct {
 			Attr []xml.Attr `xml:",any,attr"`
 		} `xml:"sldIdLst>sldId"`
-	}](z, main)
+	}](p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse pptx: %w", err)
 	}
-	r, err := related(z, main)
+	r, err := related(p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse pptx: %w", err)
 	}
-	tags, err := props(z, core)
+	tags, err := props(p, core)
 	if err != nil {
 		return d, fmt.Errorf("parse pptx: %w", err)
 	}
 
-	var s show
+	s := show{p: p}
 	for i, sl := range deck.Slides {
 		name := r.id(rid(sl.Attr))
 		if name == "" {
 			return d, fmt.Errorf("parse pptx: slide %d has no part", i+1)
 		}
-		if err := s.slide(z, name); err != nil {
+		if err := s.slide(name); err != nil {
 			return d, fmt.Errorf("parse pptx: slide %d: %w", i+1, err)
 		}
 	}
@@ -96,22 +95,23 @@ func rid(attr []xml.Attr) string {
 
 // show is a deck being laid out as text.
 type show struct {
+	p     *pkg
 	b     buf
 	secs  []Section
 	title string // the title of the slide being read
 }
 
 // slide writes one slide and its notes as a section.
-func (s *show) slide(z *zip.Reader, name string) error {
-	sl, err := part[elem](z, name)
+func (s *show) slide(name string) error {
+	sl, err := part[elem](s.p, name)
 	if err != nil {
 		return err
 	}
-	r, err := related(z, name)
+	r, err := related(s.p, name)
 	if err != nil {
 		return err
 	}
-	notes, err := part[elem](z, r.kind("notesSlide"))
+	notes, err := part[elem](s.p, r.kind("notesSlide"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -120,7 +120,9 @@ func (s *show) slide(z *zip.Reader, name string) error {
 	start := s.b.len()
 	s.title = ""
 	if tree := sl.find("spTree"); tree != nil {
-		s.shapes(tree)
+		if err := s.shapes(tree); err != nil {
+			return err
+		}
 	}
 	if tree := notes.find("spTree"); tree != nil {
 		var said []string
@@ -146,8 +148,9 @@ func (s *show) slide(z *zip.Reader, name string) error {
 
 // shapes writes the shapes of a tree in the order they are drawn, reading
 // through groups and taking the first of alternative renderings.
-func (s *show) shapes(tree *elem) {
+func (s *show) shapes(tree *elem) error {
 	for _, k := range tree.kids {
+		var err error
 		switch k.name {
 		case "sp":
 			switch place(k) {
@@ -166,17 +169,21 @@ func (s *show) shapes(tree *elem) {
 				}
 			}
 		case "grpSp":
-			s.shapes(k)
+			err = s.shapes(k)
 		case "graphicFrame":
 			if t := k.find("tbl"); t != nil {
-				grid(&s.b, cells(t))
+				err = grid(s.p, &s.b, cells(t))
 			}
 		case "AlternateContent":
 			if len(k.kids) > 0 {
-				s.shapes(k.kids[0])
+				err = s.shapes(k.kids[0])
 			}
 		}
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // place is the kind of placeholder a shape fills — title, body, slide number

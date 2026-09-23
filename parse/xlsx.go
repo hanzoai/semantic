@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -31,12 +30,12 @@ import (
 type Xlsx struct{}
 
 // Parse reads every sheet of the workbook.
-func (Xlsx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
-	z, err := unzip(d.Text)
+func (Xlsx) Parse(ctx context.Context, d semantic.Doc) (semantic.Doc, error) {
+	p, err := unzip(ctx, d.Text)
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
-	main, core, err := begin(z)
+	main, core, err := begin(p)
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
@@ -48,23 +47,23 @@ func (Xlsx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 			Name string     `xml:"name,attr"`
 			Attr []xml.Attr `xml:",any,attr"`
 		} `xml:"sheets>sheet"`
-	}](z, main)
+	}](p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
-	r, err := related(z, main)
+	r, err := related(p, main)
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
-	shared, err := pool(z, r.kind("sharedStrings"))
+	shared, err := pool(p, r.kind("sharedStrings"))
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
-	looks, err := styled(z, r.kind("styles"))
+	looks, err := styled(p, r.kind("styles"))
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
-	tags, err := props(z, core)
+	tags, err := props(p, core)
 	if err != nil {
 		return d, fmt.Errorf("parse xlsx: %w", err)
 	}
@@ -76,7 +75,7 @@ func (Xlsx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 		secs []Section
 	)
 	for _, sh := range wb.Sheets {
-		rows, err := b.sheet(z, r.id(rid(sh.Attr)))
+		rows, err := b.sheet(p, r.id(rid(sh.Attr)))
 		if err != nil {
 			return d, fmt.Errorf("parse xlsx: sheet %q: %w", sh.Name, err)
 		}
@@ -87,7 +86,9 @@ func (Xlsx) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 		secs = append(secs, Section{Title: sh.Name, Level: 1, Start: out.len()})
 		out.put(sh.Name)
 		out.nl()
-		grid(&out, rows)
+		if err := grid(p, &out, rows); err != nil {
+			return d, fmt.Errorf("parse xlsx: sheet %q: %w", sh.Name, err)
+		}
 	}
 	out.trim()
 
@@ -131,10 +132,10 @@ func (r rich) String() string {
 }
 
 // pool reads the shared string table. A workbook without one has none.
-func pool(z *zip.Reader, name string) ([]string, error) {
+func pool(p *pkg, name string) ([]string, error) {
 	t, err := part[struct {
 		SI []rich `xml:"si"`
-	}](z, name)
+	}](p, name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -154,7 +155,7 @@ type shows struct{ date, time bool }
 
 // styled reads what each cell style displays. A workbook without styles
 // shows every number as a number.
-func styled(z *zip.Reader, name string) ([]shows, error) {
+func styled(p *pkg, name string) ([]shows, error) {
 	st, err := part[struct {
 		Fmts []struct {
 			ID   int    `xml:"numFmtId,attr"`
@@ -163,7 +164,7 @@ func styled(z *zip.Reader, name string) ([]shows, error) {
 		Xfs []struct {
 			Fmt int `xml:"numFmtId,attr"`
 		} `xml:"cellXfs>xf"`
-	}](z, name)
+	}](p, name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -247,7 +248,7 @@ func custom(code string) shows {
 }
 
 // sheet reads a worksheet's rows as sparse cells, in order.
-func (b book) sheet(z *zip.Reader, name string) ([][]cell, error) {
+func (b book) sheet(p *pkg, name string) ([][]cell, error) {
 	ws, err := part[struct {
 		Rows []struct {
 			Cells []struct {
@@ -258,7 +259,7 @@ func (b book) sheet(z *zip.Reader, name string) ([][]cell, error) {
 				Is  rich   `xml:"is"`
 			} `xml:"c"`
 		} `xml:"sheetData>row"`
-	}](z, name)
+	}](p, name)
 	if err != nil {
 		return nil, err
 	}
