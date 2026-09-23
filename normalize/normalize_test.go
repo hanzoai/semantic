@@ -34,6 +34,8 @@ func TestSpace(t *testing.T) {
 		{"a paragraph break survives", "a\n\nb", "a\n\nb"},
 		{"a line break survives", "a\nb", "a\nb"},
 		{"every kind of space is a space", "a" + str(0x00A0) + "b" + str(0x2003) + "c", "a b c"},
+		{"CRLF blank lines are blank lines", "a\r\n\r\n\r\n\r\nb", "a\n\nb"},
+		{"CRLF closes a fence", "a  b\r\n```\r\ncode  x\r\n```\r\n\r\n\r\nafter   text  \r\n", "a b\n```\ncode  x\n```\n\nafter text"},
 		{"empty", "", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {

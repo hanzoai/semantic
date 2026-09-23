@@ -45,8 +45,9 @@ func Control(s string) string {
 // closing one (or to the end, when it never closes), and an indented block —
 // lines indented four columns or more that do not continue a paragraph — keep
 // their indentation, their inner spacing, their trailing space and their blank
-// lines.
+// lines. Line endings are settled first, as Lines settles them.
 func Space(s string) string {
+	s = Lines(s)
 	var (
 		b     strings.Builder
 		fence string   // the open fence, "" outside a fenced block

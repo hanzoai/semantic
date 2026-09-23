@@ -266,7 +266,7 @@ func when(s Span) string {
 	case Second:
 		return s.From.Format(time.RFC3339)
 	case Nano:
-		return s.From.Format(time.RFC3339Nano)
+		return s.From.Format("2006-01-02T15:04:05.000000000Z07:00")
 	}
 	return s.From.Format(time.RFC3339Nano) + "/" + s.Until.Format(time.RFC3339Nano)
 }

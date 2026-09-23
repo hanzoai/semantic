@@ -45,7 +45,12 @@ func TestDate(t *testing.T) {
 		{
 			"2023-03-01T10:00:00.5+09:00", Anchor{},
 			time.Date(2023, 3, 1, 10, 0, 0, 5e8, plus9), time.Date(2023, 3, 1, 10, 0, 0, 5e8+1, plus9),
-			Nano, "2023-03-01T10:00:00.5+09:00",
+			Nano, "2023-03-01T10:00:00.500000000+09:00",
+		},
+		{
+			"2023-03-01T10:00:00.000Z", Anchor{},
+			time.Date(2023, 3, 1, 10, 0, 0, 0, time.UTC), time.Date(2023, 3, 1, 10, 0, 0, 1, time.UTC),
+			Nano, "2023-03-01T10:00:00.000000000Z",
 		},
 		{
 			"2023-07-01 09:30:15", Anchor{Zone: york},
@@ -67,8 +72,15 @@ func TestDate(t *testing.T) {
 			t.Errorf("Date(%q) = [%v, %v) grain %d, want [%v, %v) grain %d",
 				c.in, got.From, got.Until, got.Grain, c.from, c.until, c.grain)
 		}
-		if s := Date.Canon(got); s != c.canon {
+		s := Date.Canon(got)
+		if s != c.canon {
 			t.Errorf("Canon(Date(%q)) = %q, want %q", c.in, s, c.canon)
+		}
+		// The canonical text reads back to the span it was written from.
+		if back, err := Date.Parse(Anchor{Point: '.'}, s); err != nil ||
+			!back.From.Equal(got.From) || !back.Until.Equal(got.Until) || back.Grain != got.Grain {
+			t.Errorf("Date(%q) = [%v, %v) grain %d, and Date(%q) = [%v, %v) grain %d, %v",
+				c.in, got.From, got.Until, got.Grain, s, back.From, back.Until, back.Grain, err)
 		}
 	}
 }
@@ -113,6 +125,12 @@ func TestRefuse(t *testing.T) {
 		{Quantity, "1,500 kg", Anchor{}, ErrAmbiguous},
 		{Quantity, "5", Anchor{}, ErrSyntax},
 		{Quantity, "kg", Anchor{}, ErrSyntax},
+		{Quantity, "5-10 kg", Anchor{}, ErrSyntax},
+		{Quantity, "5–10 kg", Anchor{}, ErrSyntax},
+		{Quantity, "1e3 kg", Anchor{}, ErrSyntax},
+		{Quantity, "1E-3 m", Anchor{}, ErrSyntax},
+		{Quantity, "1½ cups", Anchor{}, ErrSyntax},
+		{Quantity, "1 1/2 cups", Anchor{}, ErrSyntax},
 
 		{Money, "¥500", Anchor{}, ErrAmbiguous},
 		{Money, "$5", Anchor{}, ErrAmbiguous},
@@ -185,6 +203,9 @@ func TestQuantity(t *testing.T) {
 		{"1 000 Mm", "1000 Mm"},
 		{"2 tons", "2 tons"},
 		{"3 gallons", "3 gallons"},
+		{"3/4 cup", "0.75 cup"},
+		{"-1/2 kg", "-0.5 kg"},
+		{"50 km/h", "50 km/h"},
 	} {
 		if got, err := Quantity.Norm(Anchor{}, c.in); err != nil || got != c.want {
 			t.Errorf("Quantity(%q) = %q, %v; want %q", c.in, got, err, c.want)

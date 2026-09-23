@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -280,15 +281,23 @@ func measure(a Anchor, s string) (Measure, error) {
 	return Measure{Value: v, Unit: unitOf(unit)}, nil
 }
 
-// lead splits t into the number at its front and what follows. Spaces and
-// apostrophes at the end of the number belong to what follows: "5 kg" and
-// "6'" are both a number and a unit.
+// lead splits t into the numeral at its front and what follows. The numeral
+// runs as far as anything a numeral holds — digits of any script, the marks,
+// the gaps, a slash, a sign or dash, an exponent — so that Number reads "3/4"
+// and refuses "5-10", "1e3" and "1½" rather than the unit taking what it did
+// not read. Spaces and apostrophes at the end of the numeral belong to what
+// follows: "5 kg" and "6'" are both a number and a unit.
 func lead(t string) (string, string) {
 	_, rest := sign(t)
 	i := len(t) - len(rest)
 	for i < len(t) {
 		r, w := utf8.DecodeRuneInString(t[i:])
-		if !(r >= '0' && r <= '9' || r == '.' || r == ',' || gap(r) != 0) {
+		if r == 'e' || r == 'E' {
+			_, exp := sign(t[i+w:])
+			if d, _ := utf8.DecodeRuneInString(exp); !unicode.IsDigit(d) {
+				break
+			}
+		} else if !unicode.IsNumber(r) && !strings.ContainsRune(".,/+-−–—", r) && gap(r) == 0 {
 			break
 		}
 		i += w
