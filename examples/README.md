@@ -23,7 +23,7 @@ does, and every other example is one stage of it looked at closely.
 | `pipeline` | ingest → parse → normalize → split → extract → fold → export, end to end, printing what crosses each seam |
 | `ingest` | files, JSON, JSON Lines, CSV, directory walks, globs, streams, HTTP, and the origin every document carries; the registry, and the refusal that guards a fetch of an internal address |
 | `parse` | markdown, HTML, JSON, CSV, XML, email and docx: sections, links, tags and the decoded value; format detection; the seam for a format this module does not read |
-| `normalize` | the four Unicode forms, encoding detection, mojibake repair, punctuation and whitespace, running heads, and a `Chain` assembled for one corpus |
+| `normalize` | the four Unicode forms, encoding detection, mojibake repair, punctuation and whitespace, running heads, a `Chain` assembled for one corpus, and dates, numbers and money read under an `Anchor` |
 | `split` | nine splitters on one document, with the tiling property checked; overlap, a real tokenizer behind `Count`, and `Or` falling back from a splitter that needs a model |
 | `extract` | rules over patterns and a gazetteer, relations, proximity, the schema and confidence checks (which are orthogonal), endpoint binding, and the LLM path with its JSON recovery |
 | `coref` | mentions, pronouns bound to the nearest admissible name, chains — and the relation count before and after, which is what the pass is for |
@@ -181,10 +181,9 @@ chosen by configuration, and the `split` example uses it once.
 These have no Go counterpart and no interface waiting for one. They are listed
 because "partial" above should be checkable.
 
-- `normalize` has no entity, date or number normalizer and no language
-  detector, though its package comment refers to `Entity`, `Date`, `Number`,
-  `Measure` and `Rows` as if it did. Encoding detection and the text transforms
-  are all present.
+- `normalize` has no entity normalizer and no language detector. Dates,
+  numbers, quantities and money are read as typed values, and encoding
+  detection and the text transforms are all present.
 - `split` has no entity-aware, relation-aware, table or hierarchical chunker.
   Sliding windows are `Chars` with `Overlap`; structural splitting is
   `Markdown` and `Code`.

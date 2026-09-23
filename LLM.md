@@ -32,7 +32,7 @@ temporary file and asserts the N-Triples that come out.
 |---|---|---|
 | `ingest` | files, directories, globs, HTTP, stdin; one `Origin` per document, hashed | full, minus the binary decoders |
 | `parse` | text, markdown, HTML, JSON, CSV, XML, email, docx, xlsx, pptx; sections and detection | full for those; pdf and the legacy doc, xls, ppt report `ErrFormat` |
-| `normalize` | NFC/NFD/NFKC/NFKD from an embedded UCD, encoding detection, mojibake repair, HTML stripping, running-head removal | full, and correct against the UAX #15 vectors |
+| `normalize` | NFC/NFD/NFKC/NFKD from an embedded UCD, encoding detection, mojibake repair, HTML stripping, running-head removal; dates as half-open spans, exact numbers, quantities and money, read under an `Anchor` and refused when ambiguous | full, and correct against the UAX #15 vectors |
 | `split` | characters, words, tokens, sentences, paragraphs, recursive, markdown, code; a `Semantic` splitter over an embedding seam | full |
 | `extract` | rules over a gazetteer and patterns, LLM behind a `Model` interface, coreference, schema checking | deterministic paths full; model paths are the interface |
 | `kg` | the graph: folding, merging, centrality, communities, paths; `Mem` serves `store.Graph` and `store.Triple` | full |

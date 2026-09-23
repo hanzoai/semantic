@@ -5,7 +5,8 @@
 //
 // Every transform is a func(string) string, so they compose into a Chain and a
 // caller assembles the pipeline its corpus needs. Text and Clean are the two
-// chains worth having by default.
+// chains worth having by default. Dates, numbers, quantities and money are
+// read into typed values instead, under what the source says about them.
 //
 //	go run ./examples/normalize
 package main
@@ -13,6 +14,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/semantic/normalize"
 )
@@ -24,6 +26,7 @@ func main() {
 	defaults()
 	furniture()
 	chain()
+	values()
 }
 
 // forms are the four Unicode normalization forms. The canonical pair settles
@@ -150,6 +153,39 @@ func chain() {
 	// The whole reason for the chain: two documents a reader cannot tell
 	// apart now compare equal.
 	fmt.Printf("  equal: %v\n", out[0] == out[1])
+}
+
+// values are the typed readers. Each reads text under an Anchor — what the
+// source says about how to read it — and writes one canonical form; what the
+// text leaves open and the Anchor does not settle is refused, not guessed.
+// The same "01/03/2023" is the first of March to a British letter and the
+// third of January to an American one.
+func values() {
+	fmt.Println("\nvalues")
+	letter := normalize.Anchor{At: time.Date(2023, 3, 2, 0, 0, 0, 0, time.UTC), Order: normalize.DMY, Point: '.'}
+	for _, c := range []struct {
+		kind normalize.Datatype
+		a    normalize.Anchor
+		in   string
+	}{
+		{normalize.Date, normalize.Anchor{}, "March 2023"},
+		{normalize.Date, normalize.Anchor{}, "01/03/2023"},
+		{normalize.Date, letter, "01/03/2023"},
+		{normalize.Date, letter, "yesterday"},
+		{normalize.Number, normalize.Anchor{}, "1,234"},
+		{normalize.Number, letter, "1,234"},
+		{normalize.Quantity, normalize.Anchor{}, "2.50 kilograms"},
+		{normalize.Money, normalize.Anchor{}, "¥500"},
+		{normalize.Money, normalize.Anchor{}, "JP¥500"},
+	} {
+		got, err := c.kind.Norm(c.a, c.in)
+		if err != nil {
+			got = "refused: " + err.Error()
+		}
+		fmt.Printf("  %-8v %-16q → %s\n", c.kind, c.in, got)
+	}
+	span, _ := normalize.Date.Parse(normalize.Anchor{}, "March 2023")
+	fmt.Printf("  March 2023 is [%s, %s)\n", span.From.Format(time.DateOnly), span.Until.Format(time.DateOnly))
 }
 
 // show renders a string with its rune count, since two spellings of one word
