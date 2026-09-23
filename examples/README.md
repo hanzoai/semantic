@@ -22,7 +22,7 @@ does, and every other example is one stage of it looked at closely.
 |---|---|
 | `pipeline` | ingest → parse → normalize → split → extract → fold → export, end to end, printing what crosses each seam |
 | `ingest` | files, JSON, JSON Lines, CSV, directory walks, globs, streams, HTTP, and the origin every document carries; the registry, and the refusal that guards a fetch of an internal address |
-| `parse` | markdown, HTML, JSON, CSV, XML and email: sections, links, tags and the decoded value; format detection; the seam for a format whose decoder is not in the standard library |
+| `parse` | markdown, HTML, JSON, CSV, XML, email and docx: sections, links, tags and the decoded value; format detection; the seam for a format this module does not read |
 | `normalize` | the four Unicode forms, encoding detection, mojibake repair, punctuation and whitespace, running heads, and a `Chain` assembled for one corpus |
 | `split` | nine splitters on one document, with the tiling property checked; overlap, a real tokenizer behind `Count`, and `Or` falling back from a splitter that needs a model |
 | `extract` | rules over patterns and a gazetteer, relations, proximity, the schema and confidence checks (which are orthogonal), endpoint binding, and the LLM path with its JSON recovery |
@@ -116,10 +116,11 @@ rewrite.
 
 `go.mod` has no `require` block and is not to gain one.
 
-- **PDF, docx, xlsx, pptx** (notebook 03). `parse` registers them as
-  placeholders that report `ErrFormat`, so a caller can tell "this build
-  cannot" from "nobody has heard of it". The `parse` example fills the gap with
-  one `Register` call.
+- **PDF, and the legacy binary Office formats doc, xls and ppt** (notebook
+  03). `parse` registers them as placeholders that report `ErrFormat`, so a
+  caller can tell "this build cannot" from "nobody has heard of it". The
+  `parse` example fills the gap with one `Register` call. docx, xlsx and pptx
+  are zips of XML and are read with archive/zip and encoding/xml.
 - **Parquet and YAML** (notebook 15). `export` registers them as `Absent` and
   reports `ErrLibrary`. The `export` example registers a writer under
   `parquet` and reaches it the same way as the rest.

@@ -1,7 +1,7 @@
-// Command parse reads six formats — markdown, HTML, JSON, CSV, XML, email —
-// and shows what each one recovers beyond the text: the sections a splitter can
-// cut on, the links, the document's own metadata, and the decoded value for the
-// formats that have one.
+// Command parse reads seven formats — markdown, HTML, JSON, CSV, XML, email and
+// a Word document — and shows what each one recovers beyond the text: the
+// sections a splitter can cut on, the links, the document's own metadata, and
+// the decoded value for the formats that have one.
 //
 // Parsing never opens a file. Turning a source into a document is ingest's job;
 // parse reads Doc.Text and returns a document with a copy of Meta, so the
@@ -11,6 +11,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,6 +30,7 @@ func main() {
 	html(ctx)
 	structured(ctx)
 	mail(ctx)
+	word(ctx)
 	detect(ctx)
 	missing(ctx)
 }
@@ -123,6 +126,54 @@ func mail(ctx context.Context) {
 	fmt.Printf("  body     %q\n", oneline(d.Text))
 }
 
+// word reads a .docx, which is a zip of XML parts: archive/zip and
+// encoding/xml are all it takes. Headings become sections at their level and a
+// table becomes records named by its first row. The document is built here,
+// in memory, the way Word lays one out; ingest hands parse a real one's bytes
+// unchanged, so the call is the same.
+func word(ctx context.Context) {
+	const w = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`
+	p := func(style, text string) string {
+		if style != "" {
+			style = `<w:pPr><w:pStyle w:val="` + style + `"/></w:pPr>`
+		}
+		return `<w:p>` + style + `<w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	cell := func(text string) string { return `<w:tc>` + p("", text) + `</w:tc>` }
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	for _, part := range [][2]string{
+		{"_rels/.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" ` +
+			`Target="word/document.xml"/></Relationships>`},
+		{"word/document.xml", `<w:document ` + w + `><w:body>` +
+			p("Heading1", "Staff") + p("", "Babbage Engines employs two people.") +
+			`<w:tbl><w:tr>` + cell("Name") + cell("Role") + `</w:tr>` +
+			`<w:tr>` + cell("Ada Lovelace") + cell("analyst") + `</w:tr>` +
+			`<w:tr>` + cell("Charles Babbage") + cell("founder") + `</w:tr></w:tbl>` +
+			p("Heading2", "Sites") + p("", "London and Montréal.") +
+			`</w:body></w:document>`},
+	} {
+		f, err := z.Create(part[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := f.Write([]byte(part[1])); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if err := z.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	d := say(ctx, parse.Any{}, semantic.Doc{ID: "staff", Source: "staff.docx", Text: buf.String()})
+	fmt.Println("\ndocx")
+	fmt.Printf("  format   %v, from %d zipped bytes\n", d.Meta["format"], buf.Len())
+	for _, s := range parse.Sections(d) {
+		fmt.Printf("  section  h%d %-10q %q\n", s.Level, s.Title, oneline(s.Text(d)))
+	}
+}
+
 // detect is the one parser a pipeline over a mixed corpus needs: it takes the
 // format from what the ingester recorded, and otherwise from the source's
 // extension and the shape of the text.
@@ -141,10 +192,10 @@ func detect(ctx context.Context) {
 	fmt.Printf("  registered: %v\n", parse.Names())
 }
 
-// missing is the seam for a format whose decoder is not in the standard
-// library. pdf, docx, xlsx and pptx are registered as placeholders that report
-// ErrFormat, so a caller can tell "this build cannot" from "nobody has heard
-// of it" — and supplying a reader is one Register call.
+// missing is the seam for a format this package names but does not read. pdf
+// and the legacy binary Office formats — doc, xls, ppt — are registered as
+// placeholders that report ErrFormat, so a caller can tell "this build cannot"
+// from "nobody has heard of it" — and supplying a reader is one Register call.
 func missing(ctx context.Context) {
 	fmt.Println("\nformats without a decoder")
 	d := semantic.Doc{ID: "report", Source: "report.pdf", Text: "%PDF-1.7"}

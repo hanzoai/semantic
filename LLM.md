@@ -31,7 +31,7 @@ temporary file and asserts the N-Triples that come out.
 | package | what it is | parity |
 |---|---|---|
 | `ingest` | files, directories, globs, HTTP, stdin; one `Origin` per document, hashed | full, minus the binary decoders |
-| `parse` | text, markdown, HTML, JSON, CSV, XML, email; sections and detection | text formats full; binary formats report `ErrFormat` |
+| `parse` | text, markdown, HTML, JSON, CSV, XML, email, docx, xlsx, pptx; sections and detection | full for those; pdf and the legacy doc, xls, ppt report `ErrFormat` |
 | `normalize` | NFC/NFD/NFKC/NFKD from an embedded UCD, encoding detection, mojibake repair, HTML stripping, running-head removal | full, and correct against the UAX #15 vectors |
 | `split` | characters, words, tokens, sentences, paragraphs, recursive, markdown, code; a `Semantic` splitter over an embedding seam | full |
 | `extract` | rules over a gazetteer and patterns, LLM behind a `Model` interface, coreference, schema checking | deterministic paths full; model paths are the interface |
@@ -125,13 +125,14 @@ docling, OCR. Each sits behind an interface — `extract.Model`, `split.Embed`,
 `store.Vector` — so an adapter is a package, not a rewrite. The deterministic
 path is complete and is what the tests exercise.
 
-**Needs a library outside the standard one.** PDF, docx, xlsx, pptx, YAML,
-Parquet, Arrow, and an approximate nearest-neighbour index. `parse` reports
-`ErrFormat` and `export` reports `ErrLibrary`, each naming the format, so a
-caller can tell "this build cannot" from "nobody has heard of it". The graph
-drivers for Neo4j, FalkorDB, Neptune, AGE, Weaviate, Milvus, pgvector,
-Pinecone, FAISS, sqlite-vec, Anzo and Oxigraph are registered by name and
-return `ErrDriver`.
+**Needs a library outside the standard one.** PDF and the legacy binary Office
+formats (doc, xls, ppt), YAML, Parquet, Arrow, and an approximate
+nearest-neighbour index. `parse` reports `ErrFormat` and `export` reports
+`ErrLibrary`, each naming the format, so a caller can tell "this build cannot"
+from "nobody has heard of it". docx, xlsx and pptx are zips of XML and are read
+with archive/zip and encoding/xml. The graph drivers for Neo4j, FalkorDB,
+Neptune, AGE, Weaviate, Milvus, pgvector, Pinecone, FAISS, sqlite-vec, Anzo and
+Oxigraph are registered by name and return `ErrDriver`.
 
 **Collapsed, because Go's types already say it.** Python dispatches on method
 name strings through mutable registries — `get_split_method`,

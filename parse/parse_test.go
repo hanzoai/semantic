@@ -44,6 +44,11 @@ func TestDetect(t *testing.T) {
 		{"eml", "note.eml", "hello", "email"},
 		{"pdf", "paper.pdf", "hello", "pdf"},
 		{"docx", "memo.docx", "hello", "docx"},
+		{"xlsx", "book.xlsx", "hello", "xlsx"},
+		{"pptx", "deck.pptx", "hello", "pptx"},
+		{"legacy doc", "memo.doc", "hello", "doc"},
+		{"legacy xls", "book.xls", "hello", "xls"},
+		{"legacy ppt", "deck.ppt", "hello", "ppt"},
 		{"upper", "MEMO.HTML", "hello", "html"},
 		{"query", "https://x.example/a.html?q=1#top", "hello", "html"},
 		{"sniff json object", "", `{"a": 1}`, "json"},
@@ -776,14 +781,16 @@ func TestAny(t *testing.T) {
 
 // TestNeed pins the formats this package can name but not read. They must
 // fail by name so a caller can tell "no reader" from "unreadable document".
+// The legacy Office formats are compound files, not zips, and are refused as
+// themselves rather than handed to the reader of their successor.
 func TestNeed(t *testing.T) {
-	for _, name := range []string{"pdf", "docx", "xlsx", "pptx"} {
+	for _, name := range []string{"pdf", "doc", "xls", "ppt"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Any{}.Parse(context.Background(), doc("f."+name, "..."))
 			if !errors.Is(err, ErrFormat) {
 				t.Fatalf("err = %v, want ErrFormat", err)
 			}
-			if !strings.Contains(err.Error(), name) {
+			if !strings.HasPrefix(err.Error(), name+":") {
 				t.Errorf("err = %v, want it to name the format", err)
 			}
 		})
@@ -797,7 +804,8 @@ func TestNeed(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
-	for _, name := range []string{"text", "markdown", "html", "json", "jsonl", "csv", "tsv", "xml", "email", "pdf"} {
+	for _, name := range []string{"text", "markdown", "html", "json", "jsonl", "csv", "tsv", "xml", "email",
+		"docx", "pptx", "xlsx", "pdf", "doc", "xls", "ppt"} {
 		if !slices.Contains(Names(), name) {
 			t.Errorf("Names is missing %q", name)
 		}
@@ -827,6 +835,9 @@ func TestTile(t *testing.T) {
 		"email": doc("x.eml", "Subject: s\nContent-Type: multipart/mixed; boundary=Y\n\n"+
 			"--Y\nContent-Type: text/plain\n\none\n"+
 			"--Y\nContent-Type: text/plain\n\ntwo\n--Y--\n"),
+		"docx": doc("x.docx", docxFixture(t)),
+		"pptx": doc("x.pptx", pptxFixture(t)),
+		"xlsx": doc("x.xlsx", xlsxFixture(t, false)),
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -876,6 +887,9 @@ func TestMeta(t *testing.T) {
 		{"csv", CSV{}, "a,b\n1,2\n"},
 		{"xml", XML{}, "<a>1</a>"},
 		{"email", Email{}, "Subject: s\n\nbody\n"},
+		{"docx", Docx{}, docxFixture(t)},
+		{"pptx", Pptx{}, pptxFixture(t)},
+		{"xlsx", Xlsx{}, xlsxFixture(t, false)},
 	}
 	for _, c := range cases {
 		name, f := c.name, c.f

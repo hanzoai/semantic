@@ -7,9 +7,12 @@
 // otherwise from the document's extension and the shape of its text, so a
 // pipeline that does not know what it is reading still needs only one parser.
 //
-// Formats whose decoders are not in the standard library — pdf, docx, xlsx,
-// pptx — are registered as placeholders that fail with ErrFormat. Supplying a
-// reader is one Register call under the same name; nothing else changes.
+// The Office Open XML formats — docx, xlsx, pptx — are zip archives of XML,
+// and are read here with archive/zip and encoding/xml. Formats this package
+// names but does not read — pdf, and the legacy binary Office formats doc, xls
+// and ppt — are registered as placeholders that fail with ErrFormat.
+// Supplying a reader is one Register call under the same name; nothing else
+// changes.
 //
 // Parsing never opens a file. Turning a source into a Doc is ingest's job;
 // what parse reads is Doc.Text. Parsing also does not touch the caller's
@@ -26,6 +29,9 @@
 //	tags      map[string]string  the document's own metadata pairs
 //	fields    []string           column names (csv, tsv)
 //	data      any                decoded value: JSON any, CSV []map[string]string, XML *Node
+//
+// A binary format reads its file from Doc.Text, which holds the file's bytes
+// as ingest read them.
 package parse
 
 import (
@@ -50,9 +56,9 @@ type Format interface {
 	Parse(context.Context, semantic.Doc) (semantic.Doc, error)
 }
 
-// ErrFormat reports a format this package can name but not read, either
-// because no reader is registered under that name or because the format's
-// decoder is not in the standard library. Register supplies one.
+// ErrFormat reports a format this package can name but not read, because no
+// reader is registered under that name or only a placeholder is. Register
+// supplies one.
 var ErrFormat = errors.New("no reader for format")
 
 var (
@@ -71,12 +77,15 @@ func init() {
 		"tsv":      CSV{Sep: '\t'},
 		"xml":      XML{},
 		"email":    Email{},
+		"docx":     Docx{},
+		"pptx":     Pptx{},
+		"xlsx":     Xlsx{},
 	} {
 		Register(name, f)
 	}
 	// Named so detection and error messages can be specific, but unreadable
-	// until someone registers a decoder over them.
-	for _, name := range []string{"pdf", "docx", "xlsx", "pptx"} {
+	// until someone registers a reader over them.
+	for _, name := range []string{"pdf", "doc", "xls", "ppt"} {
 		Register(name, need(name))
 	}
 }
@@ -103,11 +112,10 @@ func Names() []string {
 	return slices.Sorted(maps.Keys(formats))
 }
 
-// need stands in for a format whose decoder is not in the standard library.
+// need stands in for a format this package names but does not read.
 type need string
 
-// Parse reports that this format needs a decoder the standard library does
-// not carry, naming the format.
+// Parse reports that no reader is registered for this format, naming it.
 func (n need) Parse(_ context.Context, d semantic.Doc) (semantic.Doc, error) {
 	return d, fmt.Errorf("%s: %w", string(n), ErrFormat)
 }
@@ -139,6 +147,9 @@ var (
 	_ Format          = CSV{}
 	_ Format          = XML{}
 	_ Format          = Email{}
+	_ Format          = Docx{}
+	_ Format          = Pptx{}
+	_ Format          = Xlsx{}
 	_ Format          = need("")
 )
 
@@ -150,11 +161,14 @@ var exts = map[string]string{
 	".json": "json", ".jsonl": "jsonl", ".ndjson": "jsonl",
 	".csv": "csv", ".tsv": "tsv", ".tab": "tsv",
 	".xml": "xml", ".rss": "xml", ".atom": "xml", ".svg": "xml",
-	".eml": "email",
-	".pdf": "pdf",
-	".doc": "docx", ".docx": "docx",
-	".xls": "xlsx", ".xlsx": "xlsx",
-	".ppt": "pptx", ".pptx": "pptx",
+	".eml":  "email",
+	".pdf":  "pdf",
+	".docx": "docx", ".docm": "docx",
+	".xlsx": "xlsx", ".xlsm": "xlsx",
+	".pptx": "pptx", ".pptm": "pptx",
+	// The legacy binary formats are compound files, not zips: an OOXML reader
+	// cannot open them, and they are named so that they fail as themselves.
+	".doc": "doc", ".xls": "xls", ".ppt": "ppt",
 }
 
 // Detect names the format of d, from the extension of its source when that
@@ -171,8 +185,15 @@ func Detect(d semantic.Doc) string {
 	return sniff(d.Text)
 }
 
-// sniff guesses a format from the first characters of the text.
+// sniff guesses a format from the first characters of the text, or for a
+// binary document from its signature.
 func sniff(s string) string {
+	switch {
+	case strings.HasPrefix(s, "PK\x03\x04"):
+		return office(s)
+	case strings.HasPrefix(s, "%PDF-"):
+		return "pdf"
+	}
 	t := strings.TrimSpace(s)
 	switch {
 	case t == "":
